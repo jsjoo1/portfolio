@@ -82,6 +82,12 @@ body {
   color: var(--text);
 }
 
+.tool-btn.primary {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
 .tool-btn.danger {
   color: var(--danger);
   border-color: rgba(239, 68, 68, 0.3);
@@ -724,7 +730,7 @@ var memos = [];
 var monthKey = currentMonthKey();
 var monthData = {};
 var modal = null;
-var resetType = 'txOnly'; // 'txOnly' or 'all'
+var resetType = 'txOnly';
 var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
@@ -796,6 +802,33 @@ function applyRecurring() {
     }
   });
   return changed;
+}
+
+/* [신규] 수동으로 정기 메모 재불러오기 실행 함수 */
+async function reloadMemosToMonth() {
+  var mm = parseInt(monthKey.split('-')[1], 10);
+  var count = 0;
+
+  memos.forEach(function(rec) {
+    var cId = rec.cardId || rec.cardid;
+    if (!cId || !rec.amount || !rec.months || rec.months.indexOf(mm) === -1) return;
+    
+    if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
+    
+    var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
+    if (!exists) {
+      monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
+      count++;
+    }
+  });
+
+  if (count > 0) {
+    await persistMonth();
+    render();
+    showToast(count + '개의 정기 메모 실적을 불러왔어요');
+  } else {
+    showToast('이미 이번 달에 반영되어 있거나 해당되는 메모가 없어요');
+  }
 }
 
 function subscribeMonth(key) {
@@ -947,7 +980,6 @@ async function removeMemo(id) {
   await persistMemos();
 }
 
-/* [추가] 월별 데이터 초기화 실행 함수 */
 async function executeMonthReset() {
   var label = monthLabel(monthKey);
   var confirmMsg = resetType === 'txOnly' 
@@ -958,15 +990,15 @@ async function executeMonthReset() {
 
   cards.forEach(function(c) {
     if (monthData[c.id]) {
-      monthData[c.id].tx = []; // 추가 사용 내역 초기화
+      monthData[c.id].tx = [];
       if (resetType === 'all') {
-        monthData[c.id].fixed = []; // 고정 결제도 초기화
+        monthData[c.id].fixed = [];
       }
     }
   });
 
   if (resetType === 'all') {
-    monthData._meta = {appliedRecurring: []}; // 정기메모 기록도 리셋
+    monthData._meta = {appliedRecurring: []};
   }
 
   await persistMonth();
@@ -1093,7 +1125,6 @@ function render() {
   html += '<div class="page">';
   html += '  <div class="section-title">';
   html += '    <span>카드별 실적 현황</span>';
-  /* 상단에 당월 초기화 버튼 배치 */
   html += '    <button class="tool-btn danger" id="openResetModal">당월 초기화</button>';
   html += '  </div>';
 
@@ -1136,7 +1167,12 @@ function render() {
     html += '</div>';
   });
 
-  html += '  <div class="section-title">참고 메모</div>';
+  html += '  <div class="section-title">';
+  html += '    <span>참고 메모</span>';
+  /* [추가] 정기 메모 실적 불러오기 버튼 */
+  html += '    <button class="tool-btn primary" id="reloadMemosBtn">정기 메모 불러오기</button>';
+  html += '  </div>';
+
   html += '  <div class="notes-card">';
   
   var monthNames = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
@@ -1201,7 +1237,6 @@ function renderQuickAddModal() {
   return h;
 }
 
-/* [신규] 월별 데이터 초기화 선택 모달 */
 function renderResetModal() {
   var h = '<div class="overlay" id="ovReset"><div class="sheet">';
   h += '  <div class="sheet-title">' + monthLabel(monthKey) + ' 데이터 초기화<button class="close" data-act="closeModal">✕</button></div>';
@@ -1287,6 +1322,9 @@ function bindEvents() {
   var openResetModalBtn = document.getElementById('openResetModal');
   if (openResetModalBtn) openResetModalBtn.onclick = function() { modal = 'reset'; render(); };
 
+  var reloadMemosBtn = document.getElementById('reloadMemosBtn');
+  if (reloadMemosBtn) reloadMemosBtn.onclick = reloadMemosToMonth;
+
   document.querySelectorAll('[data-act="closeModal"]').forEach(function(b) {
     b.onclick = function() { modal = null; render(); };
   });
@@ -1296,7 +1334,6 @@ function bindEvents() {
     if (el) el.addEventListener('click', function(e) { if (e.target === el) { modal = null; render(); } });
   });
 
-  /* 초기화 옵션 선택 이벤트 */
   document.querySelectorAll('[data-act="selectResetType"]').forEach(function(box) {
     box.onclick = function() {
       resetType = box.getAttribute('data-type');
@@ -1304,7 +1341,6 @@ function bindEvents() {
     };
   });
 
-  /* 초기화 실행 버튼 */
   var execResetBtn = document.getElementById('execResetBtn');
   if (execResetBtn) execResetBtn.onclick = executeMonthReset;
 
