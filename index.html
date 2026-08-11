@@ -982,12 +982,13 @@ async function addFixed(cardId, label, amount) {
   await persistMonth();
 }
 
-/* [수정] 고정 결제 항목 삭제 시 확인 팝업 추가 */
+/* [수정 완료] 고정 결제 삭제 및 즉시 반영 */
 async function removeFixed(cardId, itemId) {
   if (!confirm('해당 고정 결제 내역을 정말 삭제하시겠습니까?')) return;
   var cur = monthData[cardId]; if (!cur) return;
   cur.fixed = cur.fixed.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
+  render();
   showToast('고정 결제 내역을 삭제했어요');
 }
 
@@ -1017,12 +1018,13 @@ async function addTxToMonth(key, cardId, amount, memo, date) {
   await setDoc(docRef, base);
 }
 
-/* [수정] 추가 사용 내역 삭제 시 확인 팝업 추가 */
+/* [수정 완료] 사용 내역 삭제 및 즉시 반영 */
 async function removeTx(cardId, itemId) {
   if (!confirm('해당 사용 내역을 정말 삭제하시겠습니까?')) return;
   var cur = monthData[cardId]; if (!cur) return;
   cur.tx = cur.tx.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
+  render();
   showToast('사용 내역을 삭제했어요');
 }
 
