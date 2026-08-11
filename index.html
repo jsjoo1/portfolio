@@ -136,40 +136,22 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script>
-// Capacitor/일반 브라우저 환경용 localStorage 기반 storage shim
-// (Claude 아티팩트의 window.storage와 동일한 형태의 API를 흉내냅니다)
-(function(){
-  function keyOf(key, shared){ return (shared ? 'shared:' : 'me:') + key; }
-  window.storage = {
-    get: async function(key, shared){
-      var v = localStorage.getItem(keyOf(key, shared));
-      if(v === null) return null;
-      return {key: key, value: v, shared: !!shared};
-    },
-    set: async function(key, value, shared){
-      localStorage.setItem(keyOf(key, shared), value);
-      return {key: key, value: value, shared: !!shared};
-    },
-    delete: async function(key, shared){
-      localStorage.removeItem(keyOf(key, shared));
-      return {key: key, deleted: true, shared: !!shared};
-    },
-    list: async function(prefix, shared){
-      var pfx = keyOf(prefix || '', shared);
-      var keys = [];
-      for(var i=0;i<localStorage.length;i++){
-        var k = localStorage.key(i);
-        if(k.indexOf(pfx) === 0) keys.push(k.slice((shared?'shared:':'me:').length));
-      }
-      return {keys: keys, prefix: prefix, shared: !!shared};
-    }
+<!-- Firebase SDK 모듈 및 실시간 동기화 앱 로직 -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA29fT3VqGxdBWulCF7wNuNIu1goRlCsfA",
+    authDomain: "portfolio-87ccf.firebaseapp.com",
+    projectId: "portfolio-87ccf",
+    storageBucket: "portfolio-87ccf.firebasestorage.app",
+    messagingSenderId: "965398567245",
+    appId: "1:965398567245:web:ad2a58bb178de82a423f04"
   };
-})();
-</script>
-<script>
-(function(){
-  var STORAGE_OK = !!(window.storage && window.storage.get && window.storage.set);
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
   var DEFAULT_CARDS = [
     {id:'wooori', bank:'우리카드', product:'LG베스트렌탈', usage:'정수기·식세기 구독 할인',
@@ -180,8 +162,6 @@
      threshold:435770, annualFee:0, note:'마일리지 8만 채운 뒤, 신용카드 최소실적 초과분은 체크카드로 사용'}
   ];
 
-  // 메모 하나가 텍스트 설명이면서, 동시에 금액/카드/적용월이 채워져 있으면
-  // 해당 월에 자동으로 "고정 결제"에도 반영됩니다.
   var DEFAULT_MEMOS = [
     {id:'m-cartax', text:'자동차세', cardId:'shinhan', amount:112000, months:[6,12]},
     {id:'m-proptax', text:'재산세', cardId:'shinhan', amount:180000, months:[7,9]},
@@ -196,8 +176,9 @@
   var memos = DEFAULT_MEMOS.map(function(m){ return Object.assign({}, m, {months:m.months.slice()}); });
   var monthKey = currentMonthKey();
   var monthData = {};
-  var modal = null; // 'cards' | 'memos' | 'quickadd'
+  var modal = null;
   var quickAddDraft = {cardId:null, amount:'', memo:'', date: todayStr()};
+  var monthUnsubscribe = null;
 
   function todayStr(){
     var d = new Date();
@@ -226,53 +207,14 @@
     return d;
   }
 
-  async function safeGet(key){
-    try{ var r = await window.storage.get(key,false); return r ? r.value : null; }catch(e){ return null; }
+  async function persistMonth(){
+    await setDoc(doc(db, "app_data", "month-" + monthKey), monthData);
   }
-  async function safeSet(key, value){
-    try{ await window.storage.set(key, value, false); return true; }catch(e){ console.error('storage set failed', key, e); return false; }
+  async function persistCards(){
+    await setDoc(doc(db, "app_data", "cards-config"), { data: cards });
   }
-
-  async function loadAll(){
-    if(STORAGE_OK){
-      try{
-        var c = await safeGet('cards-config'); if(c) cards = JSON.parse(c);
-        var m = await safeGet('memos');
-        if(m){
-          memos = JSON.parse(m);
-        } else {
-          // 예전 버전(정기 지출 / 참고 메모가 분리돼 있던 버전) 데이터 마이그레이션
-          var rc = await safeGet('recurring-config');
-          var n = await safeGet('notes');
-          var migrated = [];
-          if(rc){
-            JSON.parse(rc).forEach(function(r){ migrated.push({id:r.id, text:r.label, cardId:r.cardId, amount:r.amount, months:r.months}); });
-          }
-          if(n){
-            JSON.parse(n).forEach(function(t,i){ migrated.push({id:'note-'+i+'-'+uid(), text:t, cardId:null, amount:0, months:[]}); });
-          }
-          if(migrated.length>0){ memos = migrated; await persistMemos(); }
-        }
-      }catch(e){ console.error(e); }
-    }
-    await loadMonth(monthKey);
-    render();
-  }
-
-  async function loadMonth(key){
-    if(!STORAGE_OK){ monthData = emptyMonthData(); applyRecurring(); return; }
-    try{
-      var raw = await safeGet('month-'+key);
-      var base = emptyMonthData();
-      if(raw){
-        var parsed = JSON.parse(raw);
-        cards.forEach(function(c){ if(parsed[c.id]) base[c.id] = parsed[c.id]; });
-        if(parsed.__meta) base.__meta = parsed.__meta;
-      }
-      monthData = base;
-    }catch(e){ console.error(e); monthData = emptyMonthData(); }
-    var changed = applyRecurring();
-    if(changed) await persistMonthKey(key);
+  async function persistMemos(){
+    await setDoc(doc(db, "app_data", "memos"), { data: memos });
   }
 
   function applyRecurring(){
@@ -280,9 +222,9 @@
     var mm = parseInt(monthKey.split('-')[1],10);
     var changed = false;
     memos.forEach(function(rec){
-      if(!rec.cardId || !rec.amount || !rec.months || rec.months.indexOf(mm) === -1) return; // 금액/카드/월이 다 있어야 실적에 반영
+      if(!rec.cardId || !rec.amount || !rec.months || rec.months.indexOf(mm) === -1) return;
       if(meta.appliedRecurring.indexOf(rec.id) !== -1) return;
-      if(!monthData[rec.cardId]) return; // card no longer exists
+      if(!monthData[rec.cardId]) return;
       monthData[rec.cardId].fixed.push({id:uid(), label:rec.text, amount:Number(rec.amount)||0, recurringId:rec.id});
       meta.appliedRecurring.push(rec.id);
       changed = true;
@@ -290,10 +232,43 @@
     return changed;
   }
 
-  async function persistMonth(){ if(!STORAGE_OK) return; await safeSet('month-'+monthKey, JSON.stringify(monthData)); }
-  async function persistMonthKey(key){ if(!STORAGE_OK) return; await safeSet('month-'+key, JSON.stringify(monthData)); }
-  async function persistCards(){ if(!STORAGE_OK) return; await safeSet('cards-config', JSON.stringify(cards)); }
-  async function persistMemos(){ if(!STORAGE_OK) return; await safeSet('memos', JSON.stringify(memos)); }
+  function subscribeMonth(key){
+    if(monthUnsubscribe) monthUnsubscribe();
+    monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
+      var base = emptyMonthData();
+      if(docSnap.exists()){
+        var parsed = docSnap.data();
+        cards.forEach(function(c){ if(parsed[c.id]) base[c.id] = parsed[c.id]; });
+        if(parsed.__meta) base.__meta = parsed.__meta;
+      }
+      monthData = base;
+      var changed = applyRecurring();
+      if(changed) await persistMonth();
+      render();
+    });
+  }
+
+  function initRealtimeListeners(){
+    onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
+      if(docSnap.exists()){
+        cards = docSnap.data().data || DEFAULT_CARDS;
+      } else {
+        persistCards();
+      }
+      render();
+    });
+
+    onSnapshot(doc(db, "app_data", "memos"), (docSnap) => {
+      if(docSnap.exists()){
+        memos = docSnap.data().data || [];
+      } else {
+        persistMemos();
+      }
+      render();
+    });
+
+    subscribeMonth(monthKey);
+  }
 
   function calc(card){
     var d = monthData[card.id] || {fixed:[], tx:[]};
@@ -307,16 +282,15 @@
 
   async function changeMonth(delta){
     monthKey = shiftMonth(monthKey, delta);
-    await loadMonth(monthKey);
-    render();
+    subscribeMonth(monthKey);
   }
 
   async function copyPrevFixed(cardId){
     var prevKey = shiftMonth(monthKey, -1);
-    var raw = await safeGet('month-'+prevKey);
-    if(!raw) return;
+    var prevSnap = await getDoc(doc(db, "app_data", "month-" + prevKey));
+    if(!prevSnap.exists()) return;
     try{
-      var parsed = JSON.parse(raw);
+      var parsed = prevSnap.data();
       var prevFixed = (parsed[cardId] && parsed[cardId].fixed) || [];
       var manualOnes = prevFixed.filter(function(f){ return !f.recurringId; });
       if(manualOnes.length===0) return;
@@ -324,7 +298,6 @@
       manualOnes.forEach(function(f){ cur.fixed.push({id:uid(), label:f.label, amount:f.amount}); });
       monthData[cardId] = cur;
       await persistMonth();
-      render();
       showToast('지난달 고정 결제를 불러왔어요');
     }catch(e){ console.error(e); }
   }
@@ -333,67 +306,60 @@
     if(!label || !amount) return;
     var cur = monthData[cardId] || {fixed:[],tx:[]};
     cur.fixed.push({id:uid(), label:label, amount:Number(amount)});
-    monthData[cardId] = cur; await persistMonth(); render();
+    monthData[cardId] = cur; 
+    await persistMonth();
   }
   async function removeFixed(cardId, itemId){
     var cur = monthData[cardId]; if(!cur) return;
     cur.fixed = cur.fixed.filter(function(i){return i.id!==itemId;});
-    await persistMonth(); render();
+    await persistMonth();
   }
   async function addTxToMonth(key, cardId, amount, memo, date){
-    var raw = await safeGet('month-'+key);
-    var base = key===monthKey ? monthData : emptyMonthDataForLoad(raw);
+    var docRef = doc(db, "app_data", "month-" + key);
+    var docSnap = await getDoc(docRef);
+    var base = emptyMonthData();
+    if(docSnap.exists()){
+      var parsed = docSnap.data();
+      cards.forEach(function(c){ if(parsed[c.id]) base[c.id] = parsed[c.id]; });
+      if(parsed.__meta) base.__meta = parsed.__meta;
+    }
     if(!base[cardId]) base[cardId] = {fixed:[], tx:[]};
     base[cardId].tx.push({id:uid(), amount:Number(amount), memo:memo||'', date:date||''});
-    if(key===monthKey){ monthData = base; await persistMonth(); }
-    else { await safeSet('month-'+key, JSON.stringify(base)); }
-  }
-  function emptyMonthDataForLoad(raw){
-    var base = emptyMonthData();
-    if(raw){
-      try{
-        var parsed = JSON.parse(raw);
-        cards.forEach(function(c){ if(parsed[c.id]) base[c.id] = parsed[c.id]; });
-        if(parsed.__meta) base.__meta = parsed.__meta;
-      }catch(e){}
-    }
-    return base;
+    await setDoc(docRef, base);
   }
   async function removeTx(cardId, itemId){
     var cur = monthData[cardId]; if(!cur) return;
     cur.tx = cur.tx.filter(function(i){return i.id!==itemId;});
-    await persistMonth(); render();
+    await persistMonth();
   }
   async function addMemo(text){
     memos.push({id:'memo-'+uid(), text:text||'새 메모', cardId:null, amount:0, months:[]});
-    await persistMemos(); render();
+    await persistMemos();
   }
   async function removeMemo(id){
     memos = memos.filter(function(m){return m.id!==id;});
-    await persistMemos(); render();
+    await persistMemos();
   }
 
   function showToast(msg){
     var t = document.getElementById('toast');
+    if(!t) return;
     t.textContent = msg; t.classList.add('show');
     setTimeout(function(){ t.classList.remove('show'); }, 2200);
   }
 
-  /* ---------- quick add ---------- */
   async function submitQuickAdd(){
     var d = quickAddDraft;
     if(!d.cardId || !d.amount) { showToast('카드와 금액을 입력해주세요'); return; }
     var targetKey = (d.date||todayStr()).slice(0,7);
     await addTxToMonth(targetKey, d.cardId, d.amount, d.memo, d.date);
     var jumped = targetKey !== monthKey;
-    if(jumped){ monthKey = targetKey; await loadMonth(monthKey); }
+    if(jumped){ monthKey = targetKey; subscribeMonth(monthKey); }
     modal = null;
     quickAddDraft = {cardId:cards[0]?cards[0].id:null, amount:'', memo:'', date: todayStr()};
-    render();
     showToast(jumped ? monthLabel(targetKey)+' 내역으로 기록했어요' : '사용 내역을 기록했어요');
   }
 
-  /* ---------- card settings ---------- */
   async function updateCardField(id, field, value){
     var c = cards.find(function(x){return x.id===id;});
     if(!c) return;
@@ -404,17 +370,13 @@
   async function addCard(){
     cards.push({id:'card-'+uid(), bank:'새 카드', product:'', usage:'', threshold:0, annualFee:0, note:''});
     await persistCards();
-    render();
   }
   async function deleteCard(id){
     cards = cards.filter(function(c){return c.id!==id;});
-    // 삭제된 카드를 참조하던 메모는 카드 연결만 해제 (텍스트 메모로 남김)
     memos.forEach(function(m){ if(m.cardId===id){ m.cardId=null; m.amount=0; m.months=[]; } });
     await persistCards(); await persistMemos();
-    render();
   }
 
-  /* ---------- 메모 (참고 메모 + 정기 지출 통합) ---------- */
   async function updateMemoField(id, field, value){
     var m = memos.find(function(x){return x.id===id;});
     if(!m) return;
@@ -430,12 +392,10 @@
     if(idx===-1) m.months.push(mm); else m.months.splice(idx,1);
     m.months.sort(function(a,b){return a-b;});
     await persistMemos();
-    render();
   }
   async function addMemoDetailed(){
     memos.push({id:'memo-'+uid(), text:'새 메모', cardId:null, amount:0, months:[]});
     await persistMemos();
-    render();
   }
 
   function esc(s){
@@ -453,7 +413,6 @@
     return html;
   }
 
-  /* ---------- render ---------- */
   function render(){
     var app = document.getElementById('app');
     var monthTotalNeeded = 0, monthTotalUsed = 0;
@@ -528,7 +487,7 @@
     html += '  <div class="note-add"><input type="text" id="noteInput" placeholder="메모 추가 (금액/카드 설정은 메모 설정에서)"><button data-act="addnote">추가</button></div>';
     html += '</div>';
 
-    html += '<div class="footer-note">금액·카드·적용월을 채운 메모는 해당 월 고정 결제에 자동으로 반영돼요 · 모든 기록은 이 브라우저 계정에 저장됩니다</div>';
+    html += '<div class="footer-note">실시간 데이터베이스 연동됨 · PC와 모바일에서 동일하게 동기화됩니다</div>';
     html += '</div>';
 
     html += '<button class="fab" id="fabAdd">+</button>';
@@ -647,7 +606,6 @@
       btn.onclick = function(){ removeMemo(btn.getAttribute('data-id')); };
     });
 
-    // quick add modal
     var qaSubmit = document.getElementById('qaSubmit');
     if(qaSubmit){
       qaSubmit.onclick = function(){
@@ -659,7 +617,6 @@
       };
     }
 
-    // card settings modal
     document.querySelectorAll('[data-cf]').forEach(function(inp){
       inp.onchange = function(){ updateCardField(inp.getAttribute('data-id'), inp.getAttribute('data-cf'), inp.value); };
     });
@@ -669,7 +626,6 @@
       btn.onclick = function(){ deleteCard(btn.getAttribute('data-id')); };
     });
 
-    // memo settings modal
     document.querySelectorAll('[data-mf]').forEach(function(inp){
       inp.onchange = function(){ updateMemoField(inp.getAttribute('data-id'), inp.getAttribute('data-mf'), inp.value); };
     });
@@ -683,27 +639,7 @@
     });
   }
 
-  loadAll();
-})();
-</script>
-  <!-- Firebase SDK 모듈 로드 -->
-<script type="module">
-  // 사용할 Firebase 제품의 SDK를 import 합니다. (예: app, analytics, auth, firestore 등)
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  // 필요 시 추가: import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-
-  // 제공해주신 Firebase 설정 정보
-  const firebaseConfig = {
-    apiKey: "AIzaSyA29fT3VqGxdBWulCF7wNuNIu1goRlCsfA",
-    authDomain: "portfolio-87ccf.firebaseapp.com",
-    projectId: "portfolio-87ccf",
-    storageBucket: "portfolio-87ccf.firebasestorage.app",
-    messagingSenderId: "965398567245",
-    appId: "1:965398567245:web:ad2a58bb178de82a423f04"
-  };
-
-  // Firebase 초기화
-  const app = initializeApp(firebaseConfig);
+  initRealtimeListeners();
 </script>
 </body>
 </html>
