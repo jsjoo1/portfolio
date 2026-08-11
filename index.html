@@ -29,7 +29,7 @@
   --radius: 20px;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 body {
   margin: 0;
   background-color: #0b0c0e;
@@ -277,7 +277,6 @@ body {
 .remain-row .rvalue.ok { color: var(--ok); }
 .remain-row .rvalue.pending { color: var(--primary); }
 
-/* 커스텀 토글 방식의 내역 버튼 */
 .more-toggle-btn {
   margin-top: 14px;
   background: transparent;
@@ -285,15 +284,16 @@ body {
   font-size: 12px;
   color: var(--text-soft);
   font-weight: 700;
-  padding: 0;
+  padding: 8px 0;
   cursor: pointer;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .detail-body {
   display: none;
-  margin-top: 12px;
+  margin-top: 8px;
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
@@ -317,23 +317,24 @@ body {
 .editable-amt {
   cursor: pointer;
   border-bottom: 1px dashed var(--primary);
-  padding: 2px 4px;
+  padding: 4px 6px;
   border-radius: 4px;
   transition: background 0.2s;
+  touch-action: manipulation;
 }
-.editable-amt:hover {
+.editable-amt:active {
   background: var(--surface-sub);
   color: var(--text);
 }
 
 .editable-amt-input {
-  width: 90px;
+  width: 95px;
   background: var(--surface-sub);
   border: 1px solid var(--primary);
   color: var(--text);
   border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 13px;
+  padding: 4px 6px;
+  font-size: 14px;
   font-weight: 700;
   text-align: right;
   font-family: inherit;
@@ -345,7 +346,7 @@ body {
   color: var(--danger);
   font-size: 12px;
   cursor: pointer;
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: 6px;
 }
 
@@ -775,7 +776,7 @@ var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
 var editingFixedId = null;
-var expandedCards = {}; // 열린 카드 내역 상태 유지용 객체
+var expandedCards = {};
 
 function todayStr() {
   var d = new Date();
@@ -1224,7 +1225,6 @@ function render() {
     html += '  <div class="amounts"><span class="used">' + won(r.used) + '</span><span class="goal">목표 ' + won(card.threshold) + '</span></div>';
     html += '  <div class="remain-row"><span class="rlabel">남은 필요 실적</span><span class="rvalue ' + (r.achieved ? 'ok' : 'pending') + '">' + (r.achieved ? '0원 (달성완료)' : won(r.remaining)) + '</span></div>';
 
-    /* [개선] details 제거 및 독립 커스텀 버튼 구조로 교체 */
     html += '  <button class="more-toggle-btn" data-act="toggleCardDetail" data-card="' + card.id + '">';
     html += '    ' + (isExpanded ? '내역 접기 ∧' : '내역 자세히 보기 ∨');
     html += '  </button>';
@@ -1502,7 +1502,6 @@ function bindEvents() {
     };
   });
 
-  /* [핵심] 커스텀 토글 내역 펼치기/접기 버튼 이벤트 */
   document.querySelectorAll('[data-act="toggleCardDetail"]').forEach(function(btn) {
     btn.onclick = function() {
       var cId = btn.getAttribute('data-card');
@@ -1511,10 +1510,15 @@ function bindEvents() {
     };
   });
 
+  /* [아이폰 터치 보완] touchstart 및 click 이중 감지 지원 */
   document.querySelectorAll('[data-act="startEditFixed"]').forEach(function(el) {
-    el.onclick = function() {
+    var handler = function(e) {
       editingFixedId = el.getAttribute('data-id');
       render();
+    };
+    el.onclick = handler;
+    el.ontouchstart = function(e) {
+      handler(e);
     };
   });
 
