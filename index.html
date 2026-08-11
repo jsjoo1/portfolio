@@ -850,7 +850,6 @@ function applyRecurring() {
   return changed;
 }
 
-/* [핵심 수정] 복원/불러오기 시 수정한 금액도 메모 원본 금액으로 강제 복원 */
 async function reloadMemosToMonth() {
   if (monthData._meta) {
     monthData._meta.skipRecurring = false;
@@ -868,11 +867,9 @@ async function reloadMemosToMonth() {
     var existingItem = monthData[cId].fixed.find(function(f) { return f.recurringId === rec.id; });
     
     if (existingItem) {
-      // 이미 항목이 존재하더라도 메모 원본 금액으로 원복
       existingItem.amount = Number(rec.amount) || 0;
       count++;
     } else {
-      // 신규 등록
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
       count++;
     }
@@ -1082,6 +1079,13 @@ async function executeMonthReset() {
 
   await persistMonth();
   modal = null;
+  
+  /* [핵심 수정] 파이어베이스 반영 후 즉시 로컬 state 갱신 및 렌더링 강제 실행 */
+  var base = emptyMonthData();
+  cards.forEach(function(c) { if (monthData[c.id]) base[c.id] = monthData[c.id]; });
+  if (monthData._meta) base._meta = monthData._meta;
+  monthData = base;
+  
   render();
   showToast(label + ' 데이터가 초기화되었습니다');
 }
