@@ -835,6 +835,7 @@ async function persistMemos() {
 
 function applyRecurring() {
   var meta = monthData._meta || (monthData._meta = {appliedRecurring: [], skipRecurring: false});
+  
   if (meta.skipRecurring) return false;
 
   var mm = parseInt(monthKey.split('-')[1], 10);
@@ -1221,7 +1222,7 @@ function render() {
 
   html += '  <div class="month-nav">';
   html += '    <button id="prevBtn">‹</button>';
-  html += '    <div class="month-label-wrapper" id="openMonthManual" title="터치하여 직접 입력">';
+  html += '    <div class="month-label-wrapper" id="openMonthPicker" title="터치하여 월 선택">';
   html += '      <div class="month-label">' + monthLabel(monthKey) + '</div>';
   html += '    </div>';
   html += '    <button id="nextBtn">›</button>';
@@ -1351,6 +1352,7 @@ function render() {
   if (modal === 'memos') html += renderMemoModal();
   if (modal === 'reset') html += renderResetModal();
   if (modal === 'editmemo') html += renderEditMemoModal();
+  if (modal === 'monthpicker') html += renderMonthPickerModal(); // [신규] 룰렛 팝업
 
   app.innerHTML = html;
   bindEvents();
@@ -1359,6 +1361,34 @@ function render() {
     var editInp = document.getElementById('editAmtInput-' + editingFixedId);
     if (editInp) { editInp.focus(); editInp.select(); }
   }
+}
+
+/* [신규] 2000년부터 2999년까지 지원하는 룰렛(셀렉트) 팝업 */
+function renderMonthPickerModal() {
+  var parts = monthKey.split('-');
+  var curYear = parseInt(parts[0], 10);
+  var curMonth = parseInt(parts[1], 10);
+
+  var h = '<div class="overlay" id="ovMonthPicker"><div class="sheet">';
+  h += '  <div class="sheet-title">조회할 연도 및 월 선택<button class="close" data-act="closeModal">✕</button></div>';
+  
+  h += '  <div class="row2" style="display:flex; gap:12px; margin-bottom:16px;">';
+  h += '    <div class="field" style="flex:1;"><label>연도 (2000~2999)</label><select id="pickerYear">';
+  for (var y = 2000; y <= 2999; y++) {
+    h += '      <option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '년</option>';
+  }
+  h += '    </select></div>';
+
+  h += '    <div class="field" style="flex:1;"><label>월</label><select id="pickerMonth">';
+  for (var m = 1; m <= 12; m++) {
+    h += '      <option value="' + m + '"' + (m === curMonth ? ' selected' : '') + '>' + m + '월</option>';
+  }
+  h += '    </select></div>';
+  h += '  </div>';
+
+  h += '  <button class="primary-btn" id="pickerSubmit">이동하기</button>';
+  h += '</div></div>';
+  return h;
 }
 
 function renderEditMemoModal() {
@@ -1485,16 +1515,24 @@ function bindEvents() {
   if (prevBtn) prevBtn.onclick = function() { changeMonth(-1); };
   if (nextBtn) nextBtn.onclick = function() { changeMonth(1); };
 
-  /* [신규] 숫자 입력식 월 이동 */
-  var openMonthManual = document.getElementById('openMonthManual');
-  if (openMonthManual) {
-    openMonthManual.onclick = function() {
-      var y = prompt("연도를 입력하세요 (예: 2026)", monthKey.split('-')[0]);
-      var m = prompt("월을 입력하세요 (예: 08 또는 8)", monthKey.split('-')[1]);
-      if (y && m) {
-        monthKey = y + '-' + String(m).padStart(2, '0');
-        subscribeMonth(monthKey);
-      }
+  /* [신규] 월 라벨 클릭 시 2000~2999 룰렛 모달 오픈 */
+  var openMonthPicker = document.getElementById('openMonthPicker');
+  if (openMonthPicker) {
+    openMonthPicker.onclick = function() {
+      modal = 'monthpicker';
+      render();
+    };
+  }
+
+  /* [신규] 룰렛 모달에서 이동 버튼 클릭 시 처리 */
+  var pickerSubmit = document.getElementById('pickerSubmit');
+  if (pickerSubmit) {
+    pickerSubmit.onclick = function() {
+      var y = document.getElementById('pickerYear').value;
+      var m = document.getElementById('pickerMonth').value;
+      monthKey = y + '-' + String(m).padStart(2, '0');
+      modal = null;
+      subscribeMonth(monthKey);
     };
   }
 
@@ -1517,7 +1555,7 @@ function bindEvents() {
     b.onclick = function() { modal = null; render(); };
   });
 
-  ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo'].forEach(function(id) {
+  ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo', 'ovMonthPicker'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', function(e) { if (e.target === el) { modal = null; render(); } });
   });
