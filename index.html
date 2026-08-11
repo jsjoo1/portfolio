@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 아이폰 입력 시 자동 확대 방지를 위해 maximum-scale=1.0, user-scalable=no 추가 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>카드 실적 수첩</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
@@ -82,8 +83,9 @@
 
   .subtitle-mini{font-size:11px;color:var(--text-soft);margin:10px 0 6px;font-weight:800;letter-spacing:.1px;}
   .add-form{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
-  .add-form input{border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12.5px;font-family:"Nanum Gothic",system-ui,sans-serif;}
-  .add-form input.amt{width:92px;}
+  /* 아이폰 자동확대 방지: font-size 16px 지정 */
+  .add-form input{border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:16px;font-family:"Nanum Gothic",system-ui,sans-serif;}
+  .add-form input.amt{width:110px;}
   .add-form input.memo{flex:1;min-width:80px;}
   .add-form button{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;}
   .copy-btn{margin-top:9px;background:var(--primary-soft);border:none;color:var(--primary);border-radius:10px;padding:7px 11px;font-size:11.5px;cursor:pointer;font-weight:800;}
@@ -94,7 +96,8 @@
   .note-line .mark{color:var(--primary);font-weight:800;flex:none;}
   .note-line .del{margin-left:auto;background:var(--danger-soft);border:none;color:var(--danger);cursor:pointer;font-size:12px;flex:none;border-radius:8px;padding:2px 7px;}
   .note-add{display:flex;gap:6px;margin-top:10px;}
-  .note-add input{flex:1;border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12.5px;font-family:"Nanum Gothic",system-ui,sans-serif;}
+  /* 아이폰 자동확대 방지: font-size 16px 지정 */
+  .note-add input{flex:1;border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:16px;font-family:"Nanum Gothic",system-ui,sans-serif;}
   .note-add button{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;}
 
   .empty-hint{font-size:12px;color:var(--text-soft);text-align:center;padding:8px 0;font-weight:600;}
@@ -113,7 +116,8 @@
   .sheet-title .close{background:var(--bg);border:none;font-size:18px;color:var(--text-soft);cursor:pointer;width:30px;height:30px;border-radius:50%;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:11.5px;color:var(--text-soft);margin-bottom:5px;font-weight:800;}
-  .field input,.field select{width:100%;border:1.5px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:13.5px;font-family:"Nanum Gothic",system-ui,sans-serif;}
+  /* 아이폰 자동확대 방지: font-size 16px 지정 */
+  .field input,.field select{width:100%;border:1.5px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:16px;font-family:"Nanum Gothic",system-ui,sans-serif;}
   .primary-btn{width:100%;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;margin-top:8px;}
 
   .setting-card{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;background:var(--bg);}
@@ -352,10 +356,13 @@
     var d = quickAddDraft;
     if(!d.cardId || !d.amount) { showToast('카드와 금액을 입력해주세요'); return; }
     var targetKey = (d.date||todayStr()).slice(0,7);
+    
+    modal = null;
+    render();
+
     await addTxToMonth(targetKey, d.cardId, d.amount, d.memo, d.date);
     var jumped = targetKey !== monthKey;
     if(jumped){ monthKey = targetKey; subscribeMonth(monthKey); }
-    modal = null;
     quickAddDraft = {cardId:cards[0]?cards[0].id:null, amount:'', memo:'', date: todayStr()};
     showToast(jumped ? monthLabel(targetKey)+' 내역으로 기록했어요' : '사용 내역을 기록했어요');
   }
