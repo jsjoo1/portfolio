@@ -995,6 +995,7 @@ async function addFixed(cardId, label, amount) {
   cur.fixed.push({id: uid(), label: label, amount: Number(amount)});
   monthData[cardId] = cur;
   await persistMonth();
+  render();
 }
 
 async function removeFixed(cardId, itemId) {
@@ -1745,21 +1746,21 @@ function bindEvents() {
     };
   });
 
-  /* [수정 완료] 고정 결제 삭제 이벤트 바인딩 정상화 */
+  /* [수정 완료] 고정 결제 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 사용 내역 삭제 이벤트 바인딩 정상화 */
+  /* [수정 완료] 사용 내역 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
     btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 바인딩 정상화 */
+  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 연결 */
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
     btn.onclick = function() {
       copyPrevFixed(btn.getAttribute('data-card'));
