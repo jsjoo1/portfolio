@@ -382,7 +382,6 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .note-line:last-child { border-bottom: none; }
 .note-line mark { color: var(--primary); background: none; font-weight: 800; flex: none; }
 
-/* 메모 입력 영역 상단 배치 스타일 조정 */
 .note-add {
   display: flex;
   gap: 8px;
@@ -649,24 +648,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-var DEFAULT_CARDS = [
-  {id: 'woori', bank: '우리카드', product: 'LG베스트렌탈', usage: '정수기 식세기 구독 할인', threshold: 300000, annualFee: 12000, note: '30만원 달성 시 13,000원, 100만원 달성 시 20,000원 추가 할인'},
-  {id: 'shinhan', bank: '신한카드', product: '딥오일', usage: '주유 할인', threshold: 300000, annualFee: 10000, note: '월 10만원 주유 기준 10,000원 할인'},
-  {id: 'check', bank: '체크카드', product: '', usage: '최저실적 초과분 소진용', threshold: 435770, annualFee: 0, note: '마일리지 8만 채운 뒤, 신용카드 최소실적 초과분은 체크카드로 사용'}
-];
-
-var DEFAULT_MEMOS = [
-  {id: 'm-cartax', text: '자동차세', cardId: 'shinhan', amount: 112000, months: [6, 12]},
-  {id: 'm-proptax', text: '재산세', cardId: 'shinhan', amount: 180000, months: [7, 9]},
-  {id: 'm-insurance', text: '자동차 보험료', cardId: 'check', amount: 430000, months: [1]},
-  {id: 'm-phone', text: '휴대폰 요금', cardId: 'woori', amount: 14000, months: [1,2,3,4,5,6,7,8,9,10,11,12]},
-  {id: 'm-note1', text: '신한 고정 결제: 인터넷(19일/고정) 관리비(24일/변동) 가스비(말일/변동, 겨울에 증가 가능)', cardId: null, amount: 0, months: []},
-  {id: 'm-note2', text: '가스비 말일이 휴일이면 다음달 결제 -> 해당 월 고정금액에서 제외', cardId: null, amount: 0, months: []},
-  {id: 'm-note3', text: '우선순위: ① 우리·신한은 최소 실적만 유지 -> ② 마일리지 8만 채울 때까지 다른 카드 우선 사용', cardId: null, amount: 0, months: []}
-];
-
-var cards = DEFAULT_CARDS;
-var memos = DEFAULT_MEMOS.map(function(m) { return Object.assign({}, m, {months: m.months.slice()}); });
+/* 기본값 변수는 초기 로딩 상태 렌더링용으로만 최소 보관 */
+var cards = [];
+var memos = [];
 var monthKey = currentMonthKey();
 var monthData = {};
 var modal = null;
@@ -758,12 +742,14 @@ function subscribeMonth(key) {
   });
 }
 
+/* 
+[방법 A 핵심] DB가 비어있어도 코드가 강제로 기본값을 DB에 써서 덮어씌우는 로직 제거.
+오직 파이어베이스 상의 실재 데이터만 수신합니다.
+*/
 function initRealtimeListeners() {
   onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
     if (docSnap.exists()) {
-      cards = docSnap.data().data || DEFAULT_CARDS;
-    } else {
-      persistCards();
+      cards = docSnap.data().data || [];
     }
     render();
   });
@@ -771,8 +757,6 @@ function initRealtimeListeners() {
   onSnapshot(doc(db, "app_data", "memos"), async (docSnap) => {
     if (docSnap.exists()) {
       memos = docSnap.data().data || [];
-    } else {
-      persistMemos();
     }
     var changed = applyRecurring();
     if (changed) await persistMonth();
@@ -1013,8 +997,6 @@ function render() {
 
   html += '  <div class="section-title">참고 메모</div>';
   html += '  <div class="notes-card">';
-  
-  /* 메모 추가 입력창 상단 배치 */
   html += '    <div class="note-add"><input type="text" id="noteInput" placeholder="메모 추가..."><button data-act="addnote">등록</button></div>';
 
   if (memos.length === 0) { html += '    <div class="empty-hint">등록된 메모가 없습니다</div>'; }
