@@ -277,24 +277,29 @@ body {
 .remain-row .rvalue.ok { color: var(--ok); }
 .remain-row .rvalue.pending { color: var(--primary); }
 
-details.more { margin-top: 14px; }
-details.more > summary {
-  list-style: none;
-  cursor: pointer;
+/* 커스텀 토글 방식의 내역 버튼 */
+.more-toggle-btn {
+  margin-top: 14px;
+  background: transparent;
+  border: none;
   font-size: 12px;
   color: var(--text-soft);
   font-weight: 700;
+  padding: 0;
+  cursor: pointer;
   display: flex;
   align-items: center;
 }
-details.more > summary::-webkit-details-marker { display: none; }
-details.more > summary::after { content: "내역 자세히 보기 ∨"; }
-details.more[open] > summary::after { content: "내역 접기 ∧"; }
 
 .detail-body {
+  display: none;
   margin-top: 12px;
   border-top: 1px solid var(--line);
   padding-top: 12px;
+}
+
+.detail-body.show {
+  display: block;
 }
 
 .row-line {
@@ -770,6 +775,7 @@ var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
 var editingFixedId = null;
+var expandedCards = {}; // 열린 카드 내역 상태 유지용 객체
 
 function todayStr() {
   var d = new Date();
@@ -1205,6 +1211,8 @@ function render() {
   cards.forEach(function(card) {
     var r = calc(card);
     var d = monthData[card.id] || {fixed: [], tx: []};
+    var isExpanded = !!expandedCards[card.id];
+
     html += '<div class="card">';
     html += '  <div class="card-top">';
     html += '    <div><span class="card-name"><span class="bank">' + esc(card.bank) + '</span>' + (card.product ? esc(card.product) : '') + '</span></div>';
@@ -1216,7 +1224,12 @@ function render() {
     html += '  <div class="amounts"><span class="used">' + won(r.used) + '</span><span class="goal">목표 ' + won(card.threshold) + '</span></div>';
     html += '  <div class="remain-row"><span class="rlabel">남은 필요 실적</span><span class="rvalue ' + (r.achieved ? 'ok' : 'pending') + '">' + (r.achieved ? '0원 (달성완료)' : won(r.remaining)) + '</span></div>';
 
-    html += '  <details class="more"><summary></summary><div class="detail-body">';
+    /* [개선] details 제거 및 독립 커스텀 버튼 구조로 교체 */
+    html += '  <button class="more-toggle-btn" data-act="toggleCardDetail" data-card="' + card.id + '">';
+    html += '    ' + (isExpanded ? '내역 접기 ∧' : '내역 자세히 보기 ∨');
+    html += '  </button>';
+
+    html += '  <div class="detail-body' + (isExpanded ? ' show' : '') + '">';
     html += '    <div class="subtitle-mini">고정 결제 (' + won(r.fixedTotal) + ')</div>';
     if (d.fixed.length === 0) { html += '    <div class="empty-hint">등록된 고정 결제가 없습니다</div>'; }
     d.fixed.forEach(function(f) {
@@ -1228,7 +1241,7 @@ function render() {
         amtHtml = '<span class="editable-amt" data-act="startEditFixed" data-id="' + f.id + '" title="터치하여 금액 수정">' + won(f.amount) + '</span>';
       }
 
-      html += '    <div class="row-line" data-prevent-details="true"><span class="rl-label">' + (f.recurringId ? '<span class="tag-recurring">정기</span>' : '') + esc(f.label) + '</span><span class="rl-amt">' + amtHtml + '<button class="rl-del" data-act="delfixed" data-card="' + card.id + '" data-item="' + f.id + '">✕</button></span></div>';
+      html += '    <div class="row-line"><span class="rl-label">' + (f.recurringId ? '<span class="tag-recurring">정기</span>' : '') + esc(f.label) + '</span><span class="rl-amt">' + amtHtml + '<button class="rl-del" data-act="delfixed" data-card="' + card.id + '" data-item="' + f.id + '">✕</button></span></div>';
     });
 
     html += '    <div class="add-form">';
@@ -1242,10 +1255,10 @@ function render() {
     if (d.tx.length === 0) { html += '    <div class="empty-hint">기록된 사용 내역이 없습니다</div>'; }
     d.tx.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); }).forEach(function(t) {
       var lbl = (t.date ? t.date + ' ' : '') + (t.memo || '사용 내역');
-      html += '    <div class="row-line" data-prevent-details="true"><span class="rl-label">' + esc(lbl) + '</span><span class="rl-amt">' + won(t.amount) + '<button class="rl-del" data-act="deltx" data-card="' + card.id + '" data-item="' + t.id + '">✕</button></span></div>';
+      html += '    <div class="row-line"><span class="rl-label">' + esc(lbl) + '</span><span class="rl-amt">' + won(t.amount) + '<button class="rl-del" data-act="deltx" data-card="' + card.id + '" data-item="' + t.id + '">✕</button></span></div>';
     });
 
-    html += '  </div></details>';
+    html += '  </div>';
     html += '</div>';
   });
 
@@ -1489,28 +1502,23 @@ function bindEvents() {
     };
   });
 
-  /* [핵심] 내역 줄 전체에 details 토글 방지(preventDefault) 적용 */
-  document.querySelectorAll('[data-prevent-details="true"]').forEach(function(row) {
-    row.onclick = function(e) {
-      e.preventDefault();
-      e.stopPropagation();
+  /* [핵심] 커스텀 토글 내역 펼치기/접기 버튼 이벤트 */
+  document.querySelectorAll('[data-act="toggleCardDetail"]').forEach(function(btn) {
+    btn.onclick = function() {
+      var cId = btn.getAttribute('data-card');
+      expandedCards[cId] = !expandedCards[cId];
+      render();
     };
   });
 
   document.querySelectorAll('[data-act="startEditFixed"]').forEach(function(el) {
-    el.onclick = function(e) {
-      e.preventDefault();
-      e.stopPropagation();
+    el.onclick = function() {
       editingFixedId = el.getAttribute('data-id');
       render();
     };
   });
 
   document.querySelectorAll('.editable-amt-input').forEach(function(inp) {
-    inp.onclick = function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-    };
     inp.onblur = function() {
       updateFixedAmount(inp.getAttribute('data-card'), inp.getAttribute('data-item'), inp.value);
     };
@@ -1531,17 +1539,13 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
-    btn.onclick = function(e) {
-      e.preventDefault();
-      e.stopPropagation();
+    btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
-    btn.onclick = function(e) {
-      e.preventDefault();
-      e.stopPropagation();
+    btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
