@@ -309,7 +309,6 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .row-line .rl-label { color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .row-line .rl-amt { color: var(--text-soft); font-weight: 700; display: flex; align-items: center; gap: 6px; }
 
-/* 금액 수정 가능 인라인 스타일 추가 */
 .editable-amt {
   cursor: pointer;
   border-bottom: 1px dashed var(--primary);
@@ -770,7 +769,7 @@ var resetType = 'txOnly';
 var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
-var editingFixedId = null; // 수정 중인 고정결제 ID
+var editingFixedId = null;
 
 function todayStr() {
   var d = new Date();
@@ -956,7 +955,6 @@ async function removeFixed(cardId, itemId) {
   await persistMonth();
 }
 
-/* [신규] 고정 결제 금액 수정 저장 함수 */
 async function updateFixedAmount(cardId, itemId, newAmount) {
   var cur = monthData[cardId]; if (!cur) return;
   var target = cur.fixed.find(function(i) { return i.id === itemId; });
@@ -1308,7 +1306,6 @@ function render() {
   app.innerHTML = html;
   bindEvents();
 
-  // 금액 수정 모드 포커스 지정
   if (editingFixedId) {
     var editInp = document.getElementById('editAmtInput-' + editingFixedId);
     if (editInp) { editInp.focus(); editInp.select(); }
@@ -1492,14 +1489,19 @@ function bindEvents() {
     };
   });
 
+  /* [수정] 금액 터치 시 상위 내역 접힘(이벤트 버블링) 차단 적용 */
   document.querySelectorAll('[data-act="startEditFixed"]').forEach(function(el) {
-    el.onclick = function() {
+    el.onclick = function(e) {
+      e.stopPropagation(); // 내역 상자 접힘 방지!
       editingFixedId = el.getAttribute('data-id');
       render();
     };
   });
 
   document.querySelectorAll('.editable-amt-input').forEach(function(inp) {
+    inp.onclick = function(e) {
+      e.stopPropagation(); // 입력창 누를 때 접힘 방지
+    };
     inp.onblur = function() {
       updateFixedAmount(inp.getAttribute('data-card'), inp.getAttribute('data-item'), inp.value);
     };
@@ -1520,11 +1522,17 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
-    btn.onclick = function() { removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item')); };
+    btn.onclick = function(e) {
+      e.stopPropagation(); // 삭제 시 접힘 방지
+      removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
+    };
   });
 
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
-    btn.onclick = function() { removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item')); };
+    btn.onclick = function(e) {
+      e.stopPropagation(); // 삭제 시 접힘 방지
+      removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
+    };
   });
 
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
