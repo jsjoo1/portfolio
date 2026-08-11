@@ -135,16 +135,6 @@ body {
   padding-bottom: 1px;
 }
 
-#monthPickerInput {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-}
-
 .summary-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -558,6 +548,48 @@ body {
   z-index: 100;
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 24px;
+}
+.confirm-box {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px 20px 16px;
+  max-width: 340px;
+  width: 100%;
+  color: var(--text);
+  box-shadow: 0 12px 30px rgba(0,0,0,.5);
+}
+.confirm-msg {
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-line;
+  margin-bottom: 18px;
+  font-weight: 600;
+}
+.confirm-btns { display: flex; gap: 8px; }
+.confirm-btns button {
+  flex: 1;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+.confirm-btn-cancel { background: var(--surface-sub); color: var(--text-soft); }
+.confirm-btn-ok { background: var(--danger); color: #fff; }
+
 .sheet {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -809,6 +841,8 @@ var newMemoMonths = [];
 var editingFixedId = null;
 var editingMemoId = null;
 var expandedCards = {};
+var confirmState = null;
+var monthDataReady = false; // 이번 달 Firestore 데이터가 실제로 도착했는지 여부 (레이스 컨디션 방지)
 
 function todayStr() {
   var d = new Date();
@@ -835,6 +869,14 @@ function monthLabel(key) {
   return parts[0] + '년 ' + parseInt(parts[1], 10) + '월';
 }
 
+function showConfirm(message) {
+  return new Promise(function(resolve) {
+    confirmState = {message: message, resolve: resolve};
+    modal = 'confirm';
+    render();
+  });
+}
+
 function won(n) { n = Math.round(n || 0); return n.toLocaleString('ko-KR') + '원'; }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -856,7 +898,6 @@ async function persistMemos() {
   await setDoc(doc(db, "app_data", "memos"), { data: memos });
 }
 
-/* [핵심 수정] 사용자가 한 번 지운 메모는 다시 좀비처럼 부활하지 않도록 meta.appliedRecurring 적용 */
 function applyRecurring() {
   var meta = monthData._meta || (monthData._meta = {appliedRecurring: [], skipRecurring: false});
   
@@ -871,15 +912,12 @@ function applyRecurring() {
     
     if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
     
-    // 현재 fixed 목록에 이미 있는지 확인
     var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
-    // 이미 이번 달에 한 번 불러온 적이 있는지(사용자가 지웠을 수도 있음) 확인
-    var alreadyApplied = meta.appliedRecurring.indexOf(rec.id) !== -1;
-    
-    // 이번 달에 한 번도 적용된 적이 없을 때만 자동 추가!
-    if (!exists && !alreadyApplied) {
+    if (!exists) {
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
-      meta.appliedRecurring.push(rec.id);
+      if (meta.appliedRecurring.indexOf(rec.id) === -1) {
+        meta.appliedRecurring.push(rec.id);
+      }
       changed = true;
     }
   });
@@ -889,8 +927,6 @@ function applyRecurring() {
 async function reloadMemosToMonth() {
   if (monthData._meta) {
     monthData._meta.skipRecurring = false;
-  } else {
-    monthData._meta = {appliedRecurring: [], skipRecurring: false};
   }
   
   var mm = parseInt(monthKey.split('-')[1], 10);
@@ -909,9 +945,6 @@ async function reloadMemosToMonth() {
       count++;
     } else {
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
-      if (monthData._meta.appliedRecurring.indexOf(rec.id) === -1) {
-        monthData._meta.appliedRecurring.push(rec.id);
-      }
       count++;
     }
   });
@@ -927,19 +960,16 @@ async function reloadMemosToMonth() {
 
 function subscribeMonth(key) {
   if (monthUnsubscribe) monthUnsubscribe();
+  monthDataReady = false; // 새 달로 전환하는 동안에는 다른 리스너가 섣불리 덮어쓰지 못하게 막음
   monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
+    var base = emptyMonthData();
     if (docSnap.exists()) {
       var parsed = docSnap.data();
-      monthData = parsed;
-      if (!monthData._meta) monthData._meta = {appliedRecurring: [], skipRecurring: false};
-    } else {
-      monthData = emptyMonthData();
+      cards.forEach(function(c) { if (parsed[c.id]) base[c.id] = parsed[c.id]; });
+      if (parsed._meta) base._meta = parsed._meta;
     }
-    
-    cards.forEach(function(c) {
-      if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
-    });
-
+    monthData = base;
+    monthDataReady = true; // 이 시점부터 실제 이번 달 데이터를 신뢰할 수 있음
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
@@ -950,9 +980,6 @@ function initRealtimeListeners() {
   onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
     if (docSnap.exists()) {
       cards = docSnap.data().data || [];
-      cards.forEach(function(c) {
-        if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
-      });
     }
     render();
   });
@@ -961,6 +988,7 @@ function initRealtimeListeners() {
     if (docSnap.exists()) {
       memos = docSnap.data().data || [];
     }
+    if (!monthDataReady) { render(); return; } // 이번 달 데이터가 아직 안 왔으면 저장하지 않고 대기 (초기화 방지)
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
@@ -1026,7 +1054,7 @@ async function addFixed(cardId, label, amount) {
 }
 
 async function removeFixed(cardId, itemId) {
-  if (!confirm('해당 고정 결제 내역을 정말 삭제하시겠습니까?')) return;
+  if (!(await showConfirm('해당 고정 결제 내역을 정말 삭제하시겠습니까?'))) return;
   var cur = monthData[cardId]; if (!cur) return;
   cur.fixed = cur.fixed.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
@@ -1049,20 +1077,19 @@ async function updateFixedAmount(cardId, itemId, newAmount) {
 async function addTxToMonth(key, cardId, amount, memo, date) {
   var docRef = doc(db, "app_data", "month-" + key);
   var docSnap = await getDoc(docRef);
-  var base = {};
+  var base = emptyMonthData();
   if (docSnap.exists()) {
-    base = docSnap.data();
-  } else {
-    base = emptyMonthData();
+    var parsed = docSnap.data();
+    cards.forEach(function(c) { if (parsed[c.id]) base[c.id] = parsed[c.id]; });
+    if (parsed._meta) base._meta = parsed._meta;
   }
-  if (!base._meta) base._meta = {appliedRecurring: [], skipRecurring: false};
   if (!base[cardId]) base[cardId] = {fixed: [], tx: []};
   base[cardId].tx.push({id: uid(), amount: Number(amount), memo: memo, date: date || ''});
   await setDoc(docRef, base);
 }
 
 async function removeTx(cardId, itemId) {
-  if (!confirm('해당 사용 내역을 정말 삭제하시겠습니까?')) return;
+  if (!(await showConfirm('해당 사용 내역을 정말 삭제하시겠습니까?'))) return;
   var cur = monthData[cardId]; if (!cur) return;
   cur.tx = cur.tx.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
@@ -1103,10 +1130,10 @@ async function removeMemo(id) {
   var cId = targetMemo.cardId || targetMemo.cardid;
   var isRecurring = cId && targetMemo.amount > 0;
 
-  if (!confirm('해당 메모를 정말 삭제하시겠습니까?')) return;
+  if (!(await showConfirm('해당 메모를 정말 삭제하시겠습니까?'))) return;
 
   if (isRecurring) {
-    var deleteActualRecord = confirm(
+    var deleteActualRecord = await showConfirm(
       '이 메모로 인해 이번 달 카드 실적(고정 결제)에 등록된 내역도 함께 지우시겠습니까?\n\n' +
       '[확인] 누름 -> 메모 삭제 및 이번 달 카드 실적 내역 제거\n' +
       '[취소] 누름 -> 메모만 삭제하고 카드 실적 내역은 유지'
@@ -1143,7 +1170,7 @@ async function executeMonthReset() {
     ? label + '의 [추가 사용 내역]을 정말 초기화하시겠습니까?' 
     : label + '의 [모든 실적 데이터(고정결제+사용내역)]를 정말 초기화하시겠습니까?';
 
-  if (!confirm(confirmMsg)) return;
+  if (!(await showConfirm(confirmMsg))) return;
 
   cards.forEach(function(c) {
     if (monthData[c.id]) {
@@ -1210,7 +1237,7 @@ async function addCard() {
 async function deleteCard(id) {
   var targetCard = cards.find(function(c) { return c.id === id; });
   var cardName = targetCard ? targetCard.bank : '해당 카드';
-  if (!confirm(cardName + '를 정말 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.')) return;
+  if (!(await showConfirm(cardName + '를 정말 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.'))) return;
 
   cards = cards.filter(function(c) { return c.id !== id; });
   memos.forEach(function(m) { if ((m.cardId || m.cardid) === id) { m.cardId = null; m.cardid = null; m.amount = 0; m.months = []; } });
@@ -1416,6 +1443,7 @@ function render() {
   if (modal === 'reset') html += renderResetModal();
   if (modal === 'editmemo') html += renderEditMemoModal();
   if (modal === 'monthpicker') html += renderMonthPickerModal();
+  if (modal === 'confirm') html += renderConfirmModal();
 
   app.innerHTML = html;
   bindEvents();
@@ -1424,6 +1452,18 @@ function render() {
     var editInp = document.getElementById('editAmtInput-' + editingFixedId);
     if (editInp) { editInp.focus(); editInp.select(); }
   }
+}
+
+function renderConfirmModal() {
+  if (!confirmState) return '';
+  var h = '<div class="confirm-overlay" id="ovConfirm"><div class="confirm-box">';
+  h += '  <div class="confirm-msg">' + esc(confirmState.message) + '</div>';
+  h += '  <div class="confirm-btns">';
+  h += '    <button class="confirm-btn-cancel" id="confirmNoBtn">취소</button>';
+  h += '    <button class="confirm-btn-ok" id="confirmYesBtn">삭제</button>';
+  h += '  </div>';
+  h += '</div></div>';
+  return h;
 }
 
 function renderMonthPickerModal() {
@@ -1625,6 +1665,25 @@ function bindEvents() {
     b.onclick = function() { modal = null; render(); };
   });
 
+  var confirmYesBtn = document.getElementById('confirmYesBtn');
+  if (confirmYesBtn) {
+    confirmYesBtn.onclick = function() {
+      var cs = confirmState;
+      modal = null; confirmState = null;
+      render();
+      if (cs && cs.resolve) cs.resolve(true);
+    };
+  }
+  var confirmNoBtn = document.getElementById('confirmNoBtn');
+  if (confirmNoBtn) {
+    confirmNoBtn.onclick = function() {
+      var cs = confirmState;
+      modal = null; confirmState = null;
+      render();
+      if (cs && cs.resolve) cs.resolve(false);
+    };
+  }
+
   ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo', 'ovMonthPicker'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', function(e) { if (e.target === el) { modal = null; render(); } });
@@ -1774,18 +1833,21 @@ function bindEvents() {
     };
   });
 
+  /* [수정 완료] 고정 결제 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
+  /* [수정 완료] 사용 내역 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
     btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
+  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 연결 */
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
     btn.onclick = function() {
       copyPrevFixed(btn.getAttribute('data-card'));
