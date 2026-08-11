@@ -850,6 +850,7 @@ function applyRecurring() {
   return changed;
 }
 
+/* [핵심 수정] 복원/불러오기 시 수정한 금액도 메모 원본 금액으로 강제 복원 */
 async function reloadMemosToMonth() {
   if (monthData._meta) {
     monthData._meta.skipRecurring = false;
@@ -864,8 +865,14 @@ async function reloadMemosToMonth() {
     
     if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
     
-    var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
-    if (!exists) {
+    var existingItem = monthData[cId].fixed.find(function(f) { return f.recurringId === rec.id; });
+    
+    if (existingItem) {
+      // 이미 항목이 존재하더라도 메모 원본 금액으로 원복
+      existingItem.amount = Number(rec.amount) || 0;
+      count++;
+    } else {
+      // 신규 등록
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
       count++;
     }
@@ -874,7 +881,7 @@ async function reloadMemosToMonth() {
   await persistMonth();
   render();
   if (count > 0) {
-    showToast(count + '개의 정기 메모 실적을 불러왔어요');
+    showToast(count + '개의 정기 메모 실적을 원본 금액으로 복원했어요');
   } else {
     showToast('이번 달에 반영할 추가 정기 메모가 없어요');
   }
@@ -1355,7 +1362,7 @@ function renderResetModal() {
 
   h += '  <div class="reset-opt-box' + (resetType === 'restoreRecurring' ? ' selected' : '') + '" data-act="selectResetType" data-type="restoreRecurring">';
   h += '    <div class="reset-opt-title">3. 고정 결제 금액 복원 (정기 메모 재적용)</div>';
-  h += '    <div class="reset-opt-desc">초기화되었거나 누락된 정기 메모 실적 항목들을 불러와 이번 달 실적에 다시 반영합니다.</div>';
+  h += '    <div class="reset-opt-desc">초기화되었거나 수정된 정기 메모 실적 항목들을 메모 원본 금액으로 복원합니다.</div>';
   h += '  </div>';
 
   var btnText = resetType === 'restoreRecurring' ? '고정 결제 금액 복원 실행' : '초기화 실행하기';
@@ -1510,7 +1517,6 @@ function bindEvents() {
     };
   });
 
-  /* [아이폰 터치 보완] touchstart 및 click 이중 감지 지원 */
   document.querySelectorAll('[data-act="startEditFixed"]').forEach(function(el) {
     var handler = function(e) {
       editingFixedId = el.getAttribute('data-id');
