@@ -623,6 +623,19 @@ body {
   margin-top: 10px;
 }
 
+.secondary-btn {
+  width: 100%;
+  background: var(--surface-sub);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
 .danger-btn {
   width: 100%;
   background: var(--danger);
@@ -1352,7 +1365,7 @@ function render() {
   if (modal === 'memos') html += renderMemoModal();
   if (modal === 'reset') html += renderResetModal();
   if (modal === 'editmemo') html += renderEditMemoModal();
-  if (modal === 'monthpicker') html += renderMonthPickerModal(); // [신규] 룰렛 팝업
+  if (modal === 'monthpicker') html += renderMonthPickerModal();
 
   app.innerHTML = html;
   bindEvents();
@@ -1363,7 +1376,7 @@ function render() {
   }
 }
 
-/* [신규] 2000년부터 2999년까지 지원하는 룰렛(셀렉트) 팝업 */
+/* [개선] 2000년부터 2099년까지 지원 + 이번 달 선택 버튼 추가 */
 function renderMonthPickerModal() {
   var parts = monthKey.split('-');
   var curYear = parseInt(parts[0], 10);
@@ -1372,9 +1385,9 @@ function renderMonthPickerModal() {
   var h = '<div class="overlay" id="ovMonthPicker"><div class="sheet">';
   h += '  <div class="sheet-title">조회할 연도 및 월 선택<button class="close" data-act="closeModal">✕</button></div>';
   
-  h += '  <div class="row2" style="display:flex; gap:12px; margin-bottom:16px;">';
-  h += '    <div class="field" style="flex:1;"><label>연도 (2000~2999)</label><select id="pickerYear">';
-  for (var y = 2000; y <= 2999; y++) {
+  h += '  <div class="row2" style="display:flex; gap:12px; margin-bottom:12px;">';
+  h += '    <div class="field" style="flex:1;"><label>연도 (2000~2099)</label><select id="pickerYear">';
+  for (var y = 2000; y <= 2099; y++) {
     h += '      <option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '년</option>';
   }
   h += '    </select></div>';
@@ -1386,6 +1399,7 @@ function renderMonthPickerModal() {
   h += '    </select></div>';
   h += '  </div>';
 
+  h += '  <button class="secondary-btn" id="pickerCurrentMonth">이번 달 선택</button>';
   h += '  <button class="primary-btn" id="pickerSubmit">이동하기</button>';
   h += '</div></div>';
   return h;
@@ -1515,7 +1529,6 @@ function bindEvents() {
   if (prevBtn) prevBtn.onclick = function() { changeMonth(-1); };
   if (nextBtn) nextBtn.onclick = function() { changeMonth(1); };
 
-  /* [신규] 월 라벨 클릭 시 2000~2999 룰렛 모달 오픈 */
   var openMonthPicker = document.getElementById('openMonthPicker');
   if (openMonthPicker) {
     openMonthPicker.onclick = function() {
@@ -1524,13 +1537,22 @@ function bindEvents() {
     };
   }
 
-  /* [신규] 룰렛 모달에서 이동 버튼 클릭 시 처리 */
   var pickerSubmit = document.getElementById('pickerSubmit');
   if (pickerSubmit) {
     pickerSubmit.onclick = function() {
       var y = document.getElementById('pickerYear').value;
       var m = document.getElementById('pickerMonth').value;
       monthKey = y + '-' + String(m).padStart(2, '0');
+      modal = null;
+      subscribeMonth(monthKey);
+    };
+  }
+
+  /* [신규] 룰렛 팝업 내 이번 달 선택 버튼 */
+  var pickerCurrentMonth = document.getElementById('pickerCurrentMonth');
+  if (pickerCurrentMonth) {
+    pickerCurrentMonth.onclick = function() {
+      monthKey = currentMonthKey();
       modal = null;
       subscribeMonth(monthKey);
     };
