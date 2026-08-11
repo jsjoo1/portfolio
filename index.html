@@ -686,5 +686,24 @@
   loadAll();
 })();
 </script>
+  <!-- Firebase SDK 모듈 로드 -->
+<script type="module">
+  // 사용할 Firebase 제품의 SDK를 import 합니다. (예: app, analytics, auth, firestore 등)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  // 필요 시 추가: import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+
+  // 제공해주신 Firebase 설정 정보
+  const firebaseConfig = {
+    apiKey: "AIzaSyA29fT3VqGxdBWulCF7wNuNIu1goRlCsfA",
+    authDomain: "portfolio-87ccf.firebaseapp.com",
+    projectId: "portfolio-87ccf",
+    storageBucket: "portfolio-87ccf.firebasestorage.app",
+    messagingSenderId: "965398567245",
+    appId: "1:965398567245:web:ad2a58bb178de82a423f04"
+  };
+
+  // Firebase 초기화
+  const app = initializeApp(firebaseConfig);
+</script>
 </body>
 </html>
