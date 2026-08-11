@@ -764,7 +764,7 @@ function won(n) { n = Math.round(n || 0); return n.toLocaleString('ko-KR') + '�
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 function emptyMonthData() {
-  var d = {_meta: {appliedRecurring: []}};
+  var d = {_meta: {appliedRecurring: [], skipRecurring: false}};
   cards.forEach(function(c) { d[c.id] = {fixed: [], tx: []}; });
   return d;
 }
@@ -782,7 +782,10 @@ async function persistMemos() {
 }
 
 function applyRecurring() {
-  var meta = monthData._meta || (monthData._meta = {appliedRecurring: []});
+  var meta = monthData._meta || (monthData._meta = {appliedRecurring: [], skipRecurring: false});
+  
+  if (meta.skipRecurring) return false;
+
   var mm = parseInt(monthKey.split('-')[1], 10);
   var changed = false;
 
@@ -804,8 +807,11 @@ function applyRecurring() {
   return changed;
 }
 
-/* [신규] 수동으로 정기 메모 재불러오기 실행 함수 */
 async function reloadMemosToMonth() {
+  if (monthData._meta) {
+    monthData._meta.skipRecurring = false;
+  }
+  
   var mm = parseInt(monthKey.split('-')[1], 10);
   var count = 0;
 
@@ -822,12 +828,12 @@ async function reloadMemosToMonth() {
     }
   });
 
+  await persistMonth();
+  render();
   if (count > 0) {
-    await persistMonth();
-    render();
     showToast(count + '개의 정기 메모 실적을 불러왔어요');
   } else {
-    showToast('이미 이번 달에 반영되어 있거나 해당되는 메모가 없어요');
+    showToast('이번 달에 반영할 추가 정기 메모가 없어요');
   }
 }
 
@@ -980,8 +986,18 @@ async function removeMemo(id) {
   await persistMemos();
 }
 
+/* [개선] 초기화 실행 함수 (3가지 옵션 분기 처리) */
 async function executeMonthReset() {
   var label = monthLabel(monthKey);
+
+  if (resetType === 'restoreRecurring') {
+    // 3. 고정결제 금액 복원 (정기 메모 재불러오기 실행)
+    await reloadMemosToMonth();
+    modal = null;
+    render();
+    return;
+  }
+
   var confirmMsg = resetType === 'txOnly' 
     ? label + '의 [추가 사용 내역]을 정말 초기화하시겠습니까?' 
     : label + '의 [모든 실적 데이터(고정결제+사용내역)]를 정말 초기화하시겠습니까?';
@@ -998,7 +1014,10 @@ async function executeMonthReset() {
   });
 
   if (resetType === 'all') {
-    monthData._meta = {appliedRecurring: []};
+    monthData._meta = {
+      appliedRecurring: [],
+      skipRecurring: true
+    };
   }
 
   await persistMonth();
@@ -1169,7 +1188,6 @@ function render() {
 
   html += '  <div class="section-title">';
   html += '    <span>참고 메모</span>';
-  /* [추가] 정기 메모 실적 불러오기 버튼 */
   html += '    <button class="tool-btn primary" id="reloadMemosBtn">정기 메모 불러오기</button>';
   html += '  </div>';
 
@@ -1237,9 +1255,10 @@ function renderQuickAddModal() {
   return h;
 }
 
+/* [개선] 초기화 모달 3번 옵션(고정결제 금액 복원) 추가 */
 function renderResetModal() {
   var h = '<div class="overlay" id="ovReset"><div class="sheet">';
-  h += '  <div class="sheet-title">' + monthLabel(monthKey) + ' 데이터 초기화<button class="close" data-act="closeModal">✕</button></div>';
+  h += '  <div class="sheet-title">' + monthLabel(monthKey) + ' 데이터 관리<button class="close" data-act="closeModal">✕</button></div>';
   
   h += '  <div class="reset-opt-box' + (resetType === 'txOnly' ? ' selected' : '') + '" data-act="selectResetType" data-type="txOnly">';
   h += '    <div class="reset-opt-title">1. 추가 사용 내역만 초기화 (추천)</div>';
@@ -1251,7 +1270,15 @@ function renderResetModal() {
   h += '    <div class="reset-opt-desc">이번 달의 고정 결제 항목과 추가 소비 내역을 모두 지우고 완전히 비웁니다.</div>';
   h += '  </div>';
 
-  h += '  <button class="danger-btn" id="execResetBtn">초기화 실행하기</button>';
+  h += '  <div class="reset-opt-box' + (resetType === 'restoreRecurring' ? ' selected' : '') + '" data-act="selectResetType" data-type="restoreRecurring">';
+  h += '    <div class="reset-opt-title">3. 고정 결제 금액 복원 (정기 메모 재적용)</div>';
+  h += '    <div class="reset-opt-desc">초기화되었거나 누락된 정기 메모 실적 항목들을 불러와 이번 달 실적에 다시 반영합니다.</div>';
+  h += '  </div>';
+
+  var btnText = resetType === 'restoreRecurring' ? '고정 결제 금액 복원 실행' : '초기화 실행하기';
+  var btnClass = resetType === 'restoreRecurring' ? 'primary-btn' : 'danger-btn';
+
+  h += '  <button class="' + btnClass + '" id="execResetBtn">' + btnText + '</button>';
   h += '</div></div>';
   return h;
 }
