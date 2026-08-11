@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>카드 실적 수첩</title>
 
-<!-- [수정 적용] 동일 경로의 favicon.png 연동 및 캐시 방지(v=2) 적용 -->
+<!-- 파비콘 연동 -->
 <link rel="icon" href="favicon.png?v=2" type="image/png">
 <link rel="apple-touch-icon" href="favicon.png?v=2">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -307,6 +308,32 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .row-line:last-child { border-bottom: none; }
 .row-line .rl-label { color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .row-line .rl-amt { color: var(--text-soft); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+
+/* 금액 수정 가능 인라인 스타일 추가 */
+.editable-amt {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--primary);
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.editable-amt:hover {
+  background: var(--surface-sub);
+  color: var(--text);
+}
+
+.editable-amt-input {
+  width: 90px;
+  background: var(--surface-sub);
+  border: 1px solid var(--primary);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  font-family: inherit;
+}
 
 .row-line .rl-del {
   background: var(--danger-soft);
@@ -743,6 +770,7 @@ var resetType = 'txOnly';
 var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
+var editingFixedId = null; // 수정 중인 고정결제 ID
 
 function todayStr() {
   var d = new Date();
@@ -926,6 +954,19 @@ async function removeFixed(cardId, itemId) {
   var cur = monthData[cardId]; if (!cur) return;
   cur.fixed = cur.fixed.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
+}
+
+/* [신규] 고정 결제 금액 수정 저장 함수 */
+async function updateFixedAmount(cardId, itemId, newAmount) {
+  var cur = monthData[cardId]; if (!cur) return;
+  var target = cur.fixed.find(function(i) { return i.id === itemId; });
+  if (target) {
+    target.amount = Number(newAmount) || 0;
+    await persistMonth();
+    showToast('금액을 변경했어요');
+  }
+  editingFixedId = null;
+  render();
 }
 
 async function addTxToMonth(key, cardId, amount, memo, date) {
@@ -1181,7 +1222,15 @@ function render() {
     html += '    <div class="subtitle-mini">고정 결제 (' + won(r.fixedTotal) + ')</div>';
     if (d.fixed.length === 0) { html += '    <div class="empty-hint">등록된 고정 결제가 없습니다</div>'; }
     d.fixed.forEach(function(f) {
-      html += '    <div class="row-line"><span class="rl-label">' + (f.recurringId ? '<span class="tag-recurring">정기</span>' : '') + esc(f.label) + '</span><span class="rl-amt">' + won(f.amount) + '<button class="rl-del" data-act="delfixed" data-card="' + card.id + '" data-item="' + f.id + '">✕</button></span></div>';
+      var isEditing = editingFixedId === f.id;
+      var amtHtml = '';
+      if (isEditing) {
+        amtHtml = '<input type="number" class="editable-amt-input" id="editAmtInput-' + f.id + '" value="' + f.amount + '" data-card="' + card.id + '" data-item="' + f.id + '">';
+      } else {
+        amtHtml = '<span class="editable-amt" data-act="startEditFixed" data-id="' + f.id + '" title="터치하여 금액 수정">' + won(f.amount) + '</span>';
+      }
+
+      html += '    <div class="row-line"><span class="rl-label">' + (f.recurringId ? '<span class="tag-recurring">정기</span>' : '') + esc(f.label) + '</span><span class="rl-amt">' + amtHtml + '<button class="rl-del" data-act="delfixed" data-card="' + card.id + '" data-item="' + f.id + '">✕</button></span></div>';
     });
 
     html += '    <div class="add-form">';
@@ -1258,6 +1307,12 @@ function render() {
 
   app.innerHTML = html;
   bindEvents();
+
+  // 금액 수정 모드 포커스 지정
+  if (editingFixedId) {
+    var editInp = document.getElementById('editAmtInput-' + editingFixedId);
+    if (editInp) { editInp.focus(); editInp.select(); }
+  }
 }
 
 function renderQuickAddModal() {
@@ -1434,6 +1489,24 @@ function bindEvents() {
       render();
       var panel = document.getElementById('topNoteOptPanel');
       if (panel) panel.classList.add('show');
+    };
+  });
+
+  document.querySelectorAll('[data-act="startEditFixed"]').forEach(function(el) {
+    el.onclick = function() {
+      editingFixedId = el.getAttribute('data-id');
+      render();
+    };
+  });
+
+  document.querySelectorAll('.editable-amt-input').forEach(function(inp) {
+    inp.onblur = function() {
+      updateFixedAmount(inp.getAttribute('data-card'), inp.getAttribute('data-item'), inp.value);
+    };
+    inp.onkeydown = function(e) {
+      if (e.key === 'Enter') {
+        inp.blur();
+      }
     };
   });
 
