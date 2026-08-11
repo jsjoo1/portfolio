@@ -135,17 +135,6 @@ body {
   padding-bottom: 1px;
 }
 
-/* 숨겨진 실제 월 선택 달력 인풋 */
-#monthPickerInput {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-}
-
 .summary-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -795,7 +784,7 @@ var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
 var editingFixedId = null;
-var editingMemoId = null; // [신규] 수정 중인 메모 ID
+var editingMemoId = null;
 var expandedCards = {};
 
 function todayStr() {
@@ -1233,10 +1222,8 @@ function render() {
 
   html += '  <div class="month-nav">';
   html += '    <button id="prevBtn">‹</button>';
-  /* [개선] 월 레이블을 누르면 달력(month picker)이 뜨도록 인프라 구성 */
-  html += '    <div class="month-label-wrapper">';
+  html += '    <div class="month-label-wrapper" id="openMonthSelector" title="터치하여 월 선택">';
   html += '      <div class="month-label">' + monthLabel(monthKey) + '</div>';
-  html += '      <input type="month" id="monthPickerInput" value="' + monthKey + '">';
   html += '    </div>';
   html += '    <button id="nextBtn">›</button>';
   html += '  </div>';
@@ -1347,7 +1334,6 @@ function render() {
       var mc = cards.find(function(c) { return c.id === cId; });
       badge = '<span class="tag-recurring">실적 반영</span> ' + (mc ? esc(mc.bank) + ' ' : '') + (m.months.length === 12 ? '매월' : m.months.join(',') + '월') + ' ' + won(m.amount);
     }
-    /* [개선] 메모 항목 터치 시 수정 팝업 오픈 가능하도록 data-act 지정 */
     html += '    <div class="note-item-box" data-act="openEditMemo" data-id="' + m.id + '">';
     html += '      <div><mark>•</mark><span>' + esc(m.text) + (badge ? '<br><span style="font-size: 11px; opacity:0.8;">' + badge + '</span>' : '') + '</span></div>';
     html += '      <button class="rl-del" data-act="delmemo" data-id="' + m.id + '">✕</button>';
@@ -1365,7 +1351,8 @@ function render() {
   if (modal === 'cards') html += renderCardSettingsModal();
   if (modal === 'memos') html += renderMemoModal();
   if (modal === 'reset') html += renderResetModal();
-  if (modal === 'editmemo') html += renderEditMemoModal(); // [신규] 메모 수정 모달
+  if (modal === 'editmemo') html += renderEditMemoModal();
+  if (modal === 'monthpicker') html += renderMonthPickerModal(); // [신규] 연월 룰렛(선택) 팝업
 
   app.innerHTML = html;
   bindEvents();
@@ -1376,7 +1363,34 @@ function render() {
   }
 }
 
-/* [신규] 메모 수정 팝업 화면 */
+/* [신규] 연도와 월을 직접 선택할 수 있는 룰렛(셀렉트 박스) 팝업 */
+function renderMonthPickerModal() {
+  var parts = monthKey.split('-');
+  var curYear = parseInt(parts[0], 10);
+  var curMonth = parseInt(parts[1], 10);
+
+  var h = '<div class="overlay" id="ovMonthPicker"><div class="sheet">';
+  h += '  <div class="sheet-title">조회할 월 선택<button class="close" data-act="closeModal">✕</button></div>';
+  
+  h += '  <div class="row2" style="display:flex; gap:12px; margin-bottom:16px;">';
+  h += '    <div class="field" style="flex:1;"><label>연도</label><select id="pickerYear">';
+  for (var y = 2024; y <= 2030; y++) {
+    h += '      <option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '년</option>';
+  }
+  h += '    </select></div>';
+
+  h += '    <div class="field" style="flex:1;"><label>월</label><select id="pickerMonth">';
+  for (var m = 1; m <= 12; m++) {
+    h += '      <option value="' + m + '"' + (m === curMonth ? ' selected' : '') + '>' + m + '월</option>';
+  }
+  h += '    </select></div>';
+  h += '  </div>';
+
+  h += '  <button class="primary-btn" id="pickerSubmit">이동하기</button>';
+  h += '</div></div>';
+  return h;
+}
+
 function renderEditMemoModal() {
   var m = memos.find(function(x) { return x.id === editingMemoId; });
   if (!m) return '';
@@ -1501,22 +1515,24 @@ function bindEvents() {
   if (prevBtn) prevBtn.onclick = function() { changeMonth(-1); };
   if (nextBtn) nextBtn.onclick = function() { changeMonth(1); };
 
-  /* [신규] 월 라벨 클릭 시 브라우저 달력(month picker) 띄우기 */
-  var monthLabelEl = document.querySelector('.month-label');
-  var monthPickerInput = document.getElementById('monthPickerInput');
-  if (monthLabelEl && monthPickerInput) {
-    monthLabelEl.onclick = function() {
-      if (monthPickerInput.showPicker) {
-        monthPickerInput.showPicker();
-      } else {
-        monthPickerInput.click();
-      }
+  /* [신규] 연월 레이블 터치 시 룰렛(셀렉트) 모달 오픈 */
+  var openMonthSelector = document.getElementById('openMonthSelector');
+  if (openMonthSelector) {
+    openMonthSelector.onclick = function() {
+      modal = 'monthpicker';
+      render();
     };
-    monthPickerInput.onchange = function() {
-      if (monthPickerInput.value) {
-        monthKey = monthPickerInput.value;
-        subscribeMonth(monthKey);
-      }
+  }
+
+  /* [신규] 연월 룰렛 모달 제출 버튼 이벤트 */
+  var pickerSubmit = document.getElementById('pickerSubmit');
+  if (pickerSubmit) {
+    pickerSubmit.onclick = function() {
+      var y = document.getElementById('pickerYear').value;
+      var m = document.getElementById('pickerMonth').value;
+      monthKey = y + '-' + String(m).padStart(2, '0');
+      modal = null;
+      subscribeMonth(monthKey);
     };
   }
 
@@ -1539,7 +1555,7 @@ function bindEvents() {
     b.onclick = function() { modal = null; render(); };
   });
 
-  ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo'].forEach(function(id) {
+  ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo', 'ovMonthPicker'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', function(e) { if (e.target === el) { modal = null; render(); } });
   });
@@ -1599,17 +1615,15 @@ function bindEvents() {
     };
   });
 
-  /* [신규] 참고 메모 항목 터치 시 수정 팝업 오픈 */
   document.querySelectorAll('[data-act="openEditMemo"]').forEach(function(box) {
     box.onclick = function(e) {
-      if (e.target.closest('button')) return; // 삭제 버튼 누를 때는 제외
+      if (e.target.closest('button')) return;
       editingMemoId = box.getAttribute('data-id');
       modal = 'editmemo';
       render();
     };
   });
 
-  /* [신규] 메모 수정 모달 내부 이벤트 */
   var emSubmit = document.getElementById('emSubmit');
   if (emSubmit) {
     emSubmit.onclick = function() {
