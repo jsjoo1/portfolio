@@ -960,16 +960,31 @@ async function changeMonth(delta) {
 async function copyPrevFixed(cardId) {
   var prevKey = shiftMonth(monthKey, -1);
   var prevSnap = await getDoc(doc(db, "app_data", "month-" + prevKey));
-  if (!prevSnap.exists()) return;
+  if (!prevSnap.exists()) {
+    showToast('지난달 데이터가 없어요');
+    return;
+  }
   try {
     var parsed = prevSnap.data();
     var prevFixed = (parsed[cardId] && parsed[cardId].fixed) || [];
-    var manualOnes = prevFixed.filter(function(f) { return !f.recurringId; });
-    if (manualOnes.length === 0) return;
+    if (prevFixed.length === 0) {
+      showToast('지난달 고정 결제 내역이 없어요');
+      return;
+    }
     var cur = monthData[cardId] || {fixed: [], tx: []};
-    manualOnes.forEach(function(f) { cur.fixed.push({id: uid(), label: f.label, amount: f.amount}); });
+    
+    prevFixed.forEach(function(f) {
+      var alreadyExists = cur.fixed.some(function(item) {
+        return (f.recurringId && item.recurringId === f.recurringId) || item.label === f.label;
+      });
+      if (!alreadyExists) {
+        cur.fixed.push({id: uid(), label: f.label, amount: f.amount, recurringId: f.recurringId || ''});
+      }
+    });
+
     monthData[cardId] = cur;
     await persistMonth();
+    render();
     showToast('지난달 고정 결제를 불러왔어요');
   } catch(e) { console.error(e); }
 }
@@ -982,7 +997,6 @@ async function addFixed(cardId, label, amount) {
   await persistMonth();
 }
 
-/* [수정 완료] 고정 결제 삭제 및 즉시 반영 */
 async function removeFixed(cardId, itemId) {
   if (!confirm('해당 고정 결제 내역을 정말 삭제하시겠습니까?')) return;
   var cur = monthData[cardId]; if (!cur) return;
@@ -1018,7 +1032,6 @@ async function addTxToMonth(key, cardId, amount, memo, date) {
   await setDoc(docRef, base);
 }
 
-/* [수정 완료] 사용 내역 삭제 및 즉시 반영 */
 async function removeTx(cardId, itemId) {
   if (!confirm('해당 사용 내역을 정말 삭제하시겠습니까?')) return;
   var cur = monthData[cardId]; if (!cur) return;
@@ -1732,20 +1745,25 @@ function bindEvents() {
     };
   });
 
+  /* [수정 완료] 고정 결제 삭제 이벤트 바인딩 정상화 */
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
+  /* [수정 완료] 사용 내역 삭제 이벤트 바인딩 정상화 */
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
     btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
+  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 바인딩 정상화 */
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
-    btn.onclick = function() { copyPrevFixed(btn.getAttribute('data-card')); };
+    btn.onclick = function() {
+      copyPrevFixed(btn.getAttribute('data-card'));
+    };
   });
 
   document.querySelectorAll('[data-act="delmemo"]').forEach(function(btn) {
