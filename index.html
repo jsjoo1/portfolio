@@ -982,10 +982,13 @@ async function addFixed(cardId, label, amount) {
   await persistMonth();
 }
 
+/* [수정] 고정 결제 항목 삭제 시 확인 팝업 추가 */
 async function removeFixed(cardId, itemId) {
+  if (!confirm('해당 고정 결제 내역을 정말 삭제하시겠습니까?')) return;
   var cur = monthData[cardId]; if (!cur) return;
   cur.fixed = cur.fixed.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
+  showToast('고정 결제 내역을 삭제했어요');
 }
 
 async function updateFixedAmount(cardId, itemId, newAmount) {
@@ -1014,10 +1017,13 @@ async function addTxToMonth(key, cardId, amount, memo, date) {
   await setDoc(docRef, base);
 }
 
+/* [수정] 추가 사용 내역 삭제 시 확인 팝업 추가 */
 async function removeTx(cardId, itemId) {
+  if (!confirm('해당 사용 내역을 정말 삭제하시겠습니까?')) return;
   var cur = monthData[cardId]; if (!cur) return;
   cur.tx = cur.tx.filter(function(i) { return i.id !== itemId; });
   await persistMonth();
+  showToast('사용 내역을 삭제했어요');
 }
 
 async function addMemoAdvanced(text, cardId, amount, months) {
@@ -1376,7 +1382,6 @@ function render() {
   }
 }
 
-/* [개선] 2000년부터 2099년까지 지원 + 이번 달 선택 버튼 추가 */
 function renderMonthPickerModal() {
   var parts = monthKey.split('-');
   var curYear = parseInt(parts[0], 10);
@@ -1548,7 +1553,6 @@ function bindEvents() {
     };
   }
 
-  /* [신규] 룰렛 팝업 내 이번 달 선택 버튼 */
   var pickerCurrentMonth = document.getElementById('pickerCurrentMonth');
   if (pickerCurrentMonth) {
     pickerCurrentMonth.onclick = function() {
