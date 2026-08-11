@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>카드 실적 수첩</title>
+<title>신용카드 실적</title>
 
 <!-- 파비콘 연동 -->
 <link rel="icon" href="favicon.png?v=2" type="image/png">
@@ -796,6 +796,10 @@ var resetType = 'txOnly';
 var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
+var newMemoText = '';
+var newMemoCardId = '';
+var newMemoAmount = '';
+var topNoteOptOpen = false;
 var editingFixedId = null;
 var editingMemoId = null;
 var expandedCards = {};
@@ -1051,6 +1055,10 @@ async function addMemoAdvanced(text, cardId, amount, months) {
     months: months || []
   });
   newMemoMonths = [];
+  newMemoText = '';
+  newMemoCardId = '';
+  newMemoAmount = '';
+  topNoteOptOpen = false;
   await persistMemos();
   showToast('메모를 등록했어요');
 }
@@ -1341,13 +1349,13 @@ function render() {
 
   html += '    <div class="note-add-top">';
   html += '      <div class="note-add-input-row">';
-  html += '        <input type="text" id="topNoteText" placeholder="메모 추가...">';
+  html += '        <input type="text" id="topNoteText" placeholder="메모 추가..." value="' + esc(newMemoText) + '">';
   html += '        <button class="opt-toggle-btn" id="toggleNoteOptBtn">옵션 ∨</button>';
   html += '        <button class="add-submit-btn" id="submitTopNoteBtn">등록</button>';
   html += '      </div>';
-  html += '      <div class="note-opt-panel" id="topNoteOptPanel">';
-  html += '        <div class="field"><label>실적 반영 카드</label><select id="topNoteCard">' + cardOptionsHtml('', true) + '</select></div>';
-  html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000"></div>';
+  html += '      <div class="note-opt-panel' + (topNoteOptOpen ? ' show' : '') + '" id="topNoteOptPanel">';
+  html += '        <div class="field"><label>실적 반영 카드</label><select id="topNoteCard">' + cardOptionsHtml(newMemoCardId, true) + '</select></div>';
+  html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000" value="' + esc(newMemoAmount) + '"></div>';
   html += '        <div class="field"><label>적용 월 선택</label>';
   html += '          <div class="month-chips">';
   html += '            <div class="chip chip-all' + (isAllSelectedTop ? ' active' : '') + '" data-act="toggleTopAllM">전체</div>';
@@ -1376,7 +1384,6 @@ function render() {
 
   html += '  </div>';
 
-  html += '  <div class="footer-note">뱅크샐러드 라이크 다크 테마 적용됨 • 실시간 클라우드 동기화 중</div>';
   html += '</div>';
 
   html += '<button class="fab" id="fabAdd">+</button>';
@@ -1614,9 +1621,25 @@ function bindEvents() {
   var toggleNoteOptBtn = document.getElementById('toggleNoteOptBtn');
   if (toggleNoteOptBtn) {
     toggleNoteOptBtn.onclick = function() {
+      topNoteOptOpen = !topNoteOptOpen;
       var panel = document.getElementById('topNoteOptPanel');
-      if (panel) panel.classList.toggle('show');
+      if (panel) panel.classList.toggle('show', topNoteOptOpen);
     };
+  }
+
+  var topNoteTextInp = document.getElementById('topNoteText');
+  if (topNoteTextInp) {
+    topNoteTextInp.oninput = function() { newMemoText = topNoteTextInp.value; };
+  }
+
+  var topNoteCardSel = document.getElementById('topNoteCard');
+  if (topNoteCardSel) {
+    topNoteCardSel.onchange = function() { newMemoCardId = topNoteCardSel.value; };
+  }
+
+  var topNoteAmountInp = document.getElementById('topNoteAmount');
+  if (topNoteAmountInp) {
+    topNoteAmountInp.oninput = function() { newMemoAmount = topNoteAmountInp.value; };
   }
 
   var submitTopNoteBtn = document.getElementById('submitTopNoteBtn');
@@ -1638,9 +1661,8 @@ function bindEvents() {
       } else {
         newMemoMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
       }
+      topNoteOptOpen = true;
       render();
-      var panel = document.getElementById('topNoteOptPanel');
-      if (panel) panel.classList.add('show');
     };
   }
 
@@ -1650,9 +1672,8 @@ function bindEvents() {
       var idx = newMemoMonths.indexOf(mm);
       if (idx === -1) newMemoMonths.push(mm); else newMemoMonths.splice(idx, 1);
       newMemoMonths.sort(function(a, b) { return a - b; });
+      topNoteOptOpen = true;
       render();
-      var panel = document.getElementById('topNoteOptPanel');
-      if (panel) panel.classList.add('show');
     };
   });
 
