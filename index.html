@@ -382,15 +382,19 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .note-line:last-child { border-bottom: none; }
 .note-line mark { color: var(--primary); background: none; font-weight: 800; flex: none; }
 
+/* 참고 메모 확장 폼 스타일 */
 .note-add-top {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
 
-.note-add-top input {
+.note-add-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.note-add-input-row input {
   flex: 1;
   border: 1px solid var(--line);
   background: var(--surface-sub);
@@ -400,16 +404,38 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
   font-size: 16px;
 }
 
-.note-add-top button {
-  background: var(--primary);
-  color: #fff;
+.note-add-input-row button {
   border: none;
   border-radius: 10px;
-  padding: 10px 16px;
+  padding: 10px 14px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
+
+.opt-toggle-btn {
+  background: var(--surface-sub);
+  color: var(--text-soft);
+  border: 1px solid var(--line) !important;
+}
+
+.add-submit-btn {
+  background: var(--primary);
+  color: #fff;
+}
+
+.note-opt-panel {
+  display: none;
+  margin-top: 10px;
+  background: var(--surface-sub);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.note-opt-panel.show { display: block; }
+
+.note-opt-panel .field { margin-bottom: 10px; }
+.note-opt-panel .field:last-child { margin-bottom: 0; }
 
 .empty-hint {
   font-size: 13px;
@@ -656,6 +682,7 @@ var monthData = {};
 var modal = null;
 var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
+var newMemoMonths = []; // 메모 추가용 선택 월 배열
 
 function todayStr() {
   var d = new Date();
@@ -828,12 +855,21 @@ async function removeTx(cardId, itemId) {
   await persistMonth();
 }
 
-async function addMemo(text) {
-  memos.unshift({id: 'memo-' + uid(), text: text || '새 메모', cardId: null, amount: 0, months: []});
+/* 확장 메모 등록 함수 (실적 반영 / 단순 메모 통합) */
+async function addMemoAdvanced(text, cardId, amount, months) {
+  if (!text) return;
+  memos.unshift({
+    id: 'memo-' + uid(),
+    text: text,
+    cardId: cardId || null,
+    amount: Number(amount) || 0,
+    months: months || []
+  });
+  newMemoMonths = []; // 월 선택 초기화
   await persistMemos();
+  showToast('메모를 등록했어요');
 }
 
-/* 삭제 시 Confirm 팝업 적용 */
 async function removeMemo(id) {
   if (!confirm('해당 메모를 정말 삭제하시겠습니까?')) return;
   memos = memos.filter(function(m) { return m.id !== id; });
@@ -874,7 +910,6 @@ async function addCard() {
   await persistCards();
 }
 
-/* 카드 삭제 시 Confirm 팝업 적용 */
 async function deleteCard(id) {
   var targetCard = cards.find(function(c) { return c.id === id; });
   var cardName = targetCard ? targetCard.bank : '해당 카드';
@@ -916,7 +951,7 @@ function esc(s) {
 
 function cardOptionsHtml(selectedId, includeNone) {
   var html = '';
-  if (includeNone) html += '<option value=""' + (!selectedId ? ' selected' : '') + '>실적에 반영 안 함 (텍스트 메모만)</option>';
+  if (includeNone) html += '<option value=""' + (!selectedId ? ' selected' : '') + '>실적 반영 안 함 (텍스트 메모만)</option>';
   html += cards.map(function(c) {
     return '<option value="' + c.id + '"' + (c.id === selectedId ? ' selected' : '') + '>' + esc(c.bank) + (c.product ? ' ' + esc(c.product) : '') + '</option>';
   }).join('');
@@ -1000,7 +1035,28 @@ function render() {
 
   html += '  <div class="section-title">참고 메모</div>';
   html += '  <div class="notes-card">';
-  html += '    <div class="note-add-top"><input type="text" id="noteInput" placeholder="메모 추가..."><button data-act="addnote">등록</button></div>';
+  
+  /* [개선] 옵션 확장형 메모 등록 입력창 */
+  var monthNames = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+  html += '    <div class="note-add-top">';
+  html += '      <div class="note-add-input-row">';
+  html += '        <input type="text" id="topNoteText" placeholder="메모 추가...">';
+  html += '        <button class="opt-toggle-btn" id="toggleNoteOptBtn">옵션 ∨</button>';
+  html += '        <button class="add-submit-btn" id="submitTopNoteBtn">등록</button>';
+  html += '      </div>';
+  html += '      <div class="note-opt-panel" id="topNoteOptPanel">';
+  html += '        <div class="field"><label>실적 반영 카드</label><select id="topNoteCard">' + cardOptionsHtml('', true) + '</select></div>';
+  html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000"></div>';
+  html += '        <div class="field"><label>적용 월 선택</label>';
+  html += '          <div class="month-chips">';
+  monthNames.forEach(function(mn, i) {
+    var mm = i + 1;
+    html += '            <div class="chip' + (newMemoMonths.indexOf(mm) !== -1 ? ' active' : '') + '" data-act="toggleneowmemoM" data-m="' + mm + '">' + mn + '</div>';
+  });
+  html += '          </div>';
+  html += '        </div>';
+  html += '      </div>';
+  html += '    </div>';
 
   if (memos.length === 0) { html += '    <div class="empty-hint">등록된 메모가 없습니다</div>'; }
   memos.forEach(function(m) {
@@ -1114,6 +1170,40 @@ function bindEvents() {
     if (el) el.addEventListener('click', function(e) { if (e.target === el) { modal = null; render(); } });
   });
 
+  /* 상단 메모 옵션 패널 토글 */
+  var toggleNoteOptBtn = document.getElementById('toggleNoteOptBtn');
+  if (toggleNoteOptBtn) {
+    toggleNoteOptBtn.onclick = function() {
+      var panel = document.getElementById('topNoteOptPanel');
+      if (panel) panel.classList.toggle('show');
+    };
+  }
+
+  /* 상단 메모 등록 버튼 이벤트 */
+  var submitTopNoteBtn = document.getElementById('submitTopNoteBtn');
+  if (submitTopNoteBtn) {
+    submitTopNoteBtn.onclick = function() {
+      var text = document.getElementById('topNoteText').value.trim();
+      var cardId = document.getElementById('topNoteCard').value;
+      var amount = document.getElementById('topNoteAmount').value;
+      if (!text) { showToast('메모 내용을 입력해주세요'); return; }
+      addMemoAdvanced(text, cardId, amount, newMemoMonths);
+    };
+  }
+
+  /* 신규 메모용 적용 월 칩 선택 토글 */
+  document.querySelectorAll('[data-act="toggleneowmemoM"]').forEach(function(chip) {
+    chip.onclick = function() {
+      var mm = parseInt(chip.getAttribute('data-m'), 10);
+      var idx = newMemoMonths.indexOf(mm);
+      if (idx === -1) newMemoMonths.push(mm); else newMemoMonths.splice(idx, 1);
+      newMemoMonths.sort(function(a, b) { return a - b; });
+      render();
+      var panel = document.getElementById('topNoteOptPanel');
+      if (panel) panel.classList.add('show'); // 패널 유치
+    };
+  });
+
   document.querySelectorAll('[data-act="addfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       var cardId = btn.getAttribute('data-card');
@@ -1134,14 +1224,6 @@ function bindEvents() {
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
     btn.onclick = function() { copyPrevFixed(btn.getAttribute('data-card')); };
   });
-
-  var addNoteBtn = document.querySelector('[data-act="addnote"]');
-  if (addNoteBtn) {
-    addNoteBtn.onclick = function() {
-      var v = document.getElementById('noteInput').value.trim();
-      if (v) addMemo(v);
-    };
-  }
 
   document.querySelectorAll('[data-act="delmemo"]').forEach(function(btn) {
     btn.onclick = function() { removeMemo(btn.getAttribute('data-id')); };
