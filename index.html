@@ -382,7 +382,6 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .note-line:last-child { border-bottom: none; }
 .note-line mark { color: var(--primary); background: none; font-weight: 800; flex: none; }
 
-/* 상단 배치 전용 스타일 */
 .note-add-top {
   display: flex;
   gap: 8px;
@@ -494,7 +493,7 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .sheet-title {
   font-weight: 800;
   font-size: 18px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -578,6 +577,7 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  margin-bottom: 16px;
 }
 
 .month-chips {
@@ -897,7 +897,7 @@ async function toggleMemoMonth(id, mm) {
 }
 
 async function addMemoDetailed() {
-  memos.push({id: 'memo-' + uid(), text: '새 메모', cardId: null, amount: 0, months: []});
+  memos.unshift({id: 'memo-' + uid(), text: '새 메모', cardId: null, amount: 0, months: []});
   await persistMemos();
 }
 
@@ -993,8 +993,6 @@ function render() {
 
   html += '  <div class="section-title">참고 메모</div>';
   html += '  <div class="notes-card">';
-  
-  /* 메모 카드 상단 입력창 (단일 배치) */
   html += '    <div class="note-add-top"><input type="text" id="noteInput" placeholder="메모 추가..."><button data-act="addnote">등록</button></div>';
 
   if (memos.length === 0) { html += '    <div class="empty-hint">등록된 메모가 없습니다</div>'; }
@@ -1056,10 +1054,15 @@ function renderCardSettingsModal() {
   return h;
 }
 
+/* [핵심 수정 위치] 메모 설정 팝업(모달) 상단에 "+ 새 메모 추가" 버튼 배치 */
 function renderMemoModal() {
   var monthNames = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
   var h = '<div class="overlay" id="ovMemos"><div class="sheet">';
   h += '  <div class="sheet-title">메모 설정<button class="close" data-act="closeModal">✕</button></div>';
+  
+  /* 팝업 제목 바로 아래로 버튼 이동 */
+  h += '  <button class="add-outline-btn" id="addMemoBtn">+ 새 메모 추가</button>';
+  
   if (memos.length === 0) h += '  <div class="empty-hint">등록된 메모가 없습니다</div>';
   memos.forEach(function(m) {
     var selectedCard = m.cardId || m.cardid;
@@ -1077,7 +1080,7 @@ function renderMemoModal() {
     h += '    <button class="setting-del" data-act="delmemosetting" data-id="' + m.id + '">삭제</button>';
     h += '  </div>';
   });
-  h += '  <button class="add-outline-btn" id="addMemoBtn">+ 새 메모 추가</button>';
+  
   h += '</div></div>';
   return h;
 }
