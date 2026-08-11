@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>카드 실적 수첩</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f5fa;
+    --surface:#ffffff;
+    --line:#eceef4;
+    --text:#1c1e2b;
+    --text-soft:#8b8fa3;
+    --primary:#6C5CE7;
+    --primary-dark:#5646d6;
+    --primary-soft:#efecff;
+    --ok:#00c896;
+    --ok-soft:#e3fbf4;
+    --danger:#ff5c72;
+    --danger-soft:#ffe9ec;
+    --radius:18px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:transparent;font-family:"Nanum Gothic","Apple SD Gothic Neo",system-ui,sans-serif;color:var(--text);}
+  .app{max-width:640px;margin:0 auto;background:var(--bg);min-height:100vh;position:relative;}
+
+  /* ---------- top header ---------- */
+  .cover{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:22px 20px 24px;border-radius:0 0 28px 28px;box-shadow:0 10px 30px -12px rgba(108,92,231,.5);}
+  .cover-title{font-weight:800;font-size:20px;letter-spacing:-.2px;display:flex;align-items:center;gap:7px;}
+  .cover-title .dot{width:7px;height:7px;border-radius:50%;background:#fff;opacity:.85;display:inline-block;}
+  .cover-tools{display:flex;gap:8px;margin-top:14px;}
+  .tool-btn{background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:20px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;}
+  .tool-btn:active{background:rgba(255,255,255,.28);}
+  .month-nav{display:flex;align-items:center;justify-content:space-between;margin-top:20px;background:rgba(255,255,255,.14);border-radius:16px;padding:6px 10px;}
+  .month-nav button{background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:15px;cursor:pointer;}
+  .month-nav button:active{background:rgba(255,255,255,.34);}
+  .month-label{font-size:16px;font-weight:800;letter-spacing:-.2px;}
+  .month-total{margin-top:16px;display:flex;justify-content:space-between;align-items:baseline;}
+  .month-total .label{font-size:11.5px;color:rgba(255,255,255,.78);font-weight:700;}
+  .month-total .value{font-size:19px;font-weight:800;letter-spacing:-.3px;}
+
+  .page{padding:18px 16px 100px;}
+  .section-title{font-weight:800;font-size:14px;color:var(--text);letter-spacing:-.1px;margin:22px 4px 12px;display:flex;align-items:center;gap:6px;}
+  .section-title:first-child{margin-top:4px;}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 14px;margin-bottom:12px;position:relative;box-shadow:0 2px 10px -6px rgba(28,30,43,.08);}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card-name{font-weight:800;font-size:15.5px;letter-spacing:-.2px;}
+  .card-name .bank{color:var(--primary);font-size:11.5px;font-weight:800;letter-spacing:.1px;display:block;margin-bottom:3px;}
+  .card-note{font-size:11.5px;color:var(--text-soft);margin-top:4px;line-height:1.5;font-weight:400;}
+  .stamp{font-size:11px;color:var(--ok);background:var(--ok-soft);border-radius:20px;padding:5px 11px;font-weight:800;flex:none;opacity:0;transition:opacity .25s ease,transform .25s ease;transform:scale(.85);}
+  .stamp.show{opacity:1;transform:scale(1);animation:stampin .3s ease;}
+  @keyframes stampin{from{opacity:0;transform:scale(.6);}to{opacity:1;transform:scale(1);}}
+
+  .bar-track{height:9px;border-radius:20px;background:var(--bg);margin:14px 0 9px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,var(--primary),#a29bfe);transition:width .35s ease;}
+  .bar-fill.ok{background:linear-gradient(90deg,var(--ok),#4ce3b6);}
+  .amounts{display:flex;justify-content:space-between;font-size:13px;}
+  .amounts .used{color:var(--text);font-weight:800;}
+  .amounts .goal{color:var(--text-soft);font-weight:600;}
+  .remain-row{display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:12.5px;}
+  .remain-row .rlabel{color:var(--text-soft);font-weight:600;}
+  .remain-row .rvalue{font-weight:800;}
+  .remain-row .rvalue.ok{color:var(--ok);}
+  .remain-row .rvalue.pending{color:var(--primary);}
+
+  details.more{margin-top:12px;}
+  details.more>summary{list-style:none;cursor:pointer;font-size:12px;color:var(--primary);font-weight:800;display:flex;align-items:center;gap:4px;user-select:none;}
+  details.more>summary::-webkit-details-marker{display:none;}
+  details.more>summary::after{content:"내역 자세히 보기 ›";}
+  details.more[open]>summary::after{content:"내역 접기 ‹";}
+  .detail-body{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;}
+
+  .row-line{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:12.5px;border-bottom:1px solid var(--line);gap:6px;}
+  .row-line:last-child{border-bottom:none;}
+  .row-line .rl-label{color:var(--text);display:flex;align-items:center;gap:6px;font-weight:600;}
+  .row-line .rl-amt{color:var(--text-soft);display:flex;align-items:center;gap:4px;flex:none;font-weight:700;}
+  .row-line .rl-del{background:var(--danger-soft);border:none;color:var(--danger);font-size:13px;cursor:pointer;padding:2px 7px;border-radius:8px;}
+  .tag-recurring{font-size:9.5px;background:var(--primary-soft);color:var(--primary);border-radius:6px;padding:2px 6px;font-weight:800;letter-spacing:.1px;flex:none;}
+
+  .subtitle-mini{font-size:11px;color:var(--text-soft);margin:10px 0 6px;font-weight:800;letter-spacing:.1px;}
+  .add-form{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .add-form input{border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12.5px;font-family:"Nanum Gothic",system-ui,sans-serif;}
+  .add-form input.amt{width:92px;}
+  .add-form input.memo{flex:1;min-width:80px;}
+  .add-form button{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;}
+  .copy-btn{margin-top:9px;background:var(--primary-soft);border:none;color:var(--primary);border-radius:10px;padding:7px 11px;font-size:11.5px;cursor:pointer;font-weight:800;}
+
+  .notes-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:0 2px 10px -6px rgba(28,30,43,.08);}
+  .note-line{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.55;color:var(--text-soft);font-weight:500;}
+  .note-line:last-child{border-bottom:none;}
+  .note-line .mark{color:var(--primary);font-weight:800;flex:none;}
+  .note-line .del{margin-left:auto;background:var(--danger-soft);border:none;color:var(--danger);cursor:pointer;font-size:12px;flex:none;border-radius:8px;padding:2px 7px;}
+  .note-add{display:flex;gap:6px;margin-top:10px;}
+  .note-add input{flex:1;border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12.5px;font-family:"Nanum Gothic",system-ui,sans-serif;}
+  .note-add button{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;}
+
+  .empty-hint{font-size:12px;color:var(--text-soft);text-align:center;padding:8px 0;font-weight:600;}
+  .loading{padding:60px 20px;text-align:center;color:var(--text-soft);font-size:13px;font-weight:700;}
+  .footer-note{text-align:center;font-size:11px;color:var(--text-soft);margin-top:20px;font-weight:600;opacity:.85;}
+
+  /* floating quick-add */
+  .fab{position:fixed;right:18px;bottom:22px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-size:27px;border:none;box-shadow:0 10px 24px -6px rgba(108,92,231,.6);cursor:pointer;z-index:40;}
+  @media (min-width:641px){ .fab{right:calc(50% - 300px);} }
+
+  /* overlay modal */
+  .overlay{position:fixed;inset:0;background:rgba(20,20,35,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
+  .sheet{background:var(--surface);width:100%;max-width:640px;border-radius:24px 24px 0 0;padding:10px 18px 28px;max-height:86vh;overflow-y:auto;}
+  .sheet::before{content:"";display:block;width:38px;height:4px;background:var(--line);border-radius:4px;margin:6px auto 14px;}
+  .sheet-title{font-weight:800;font-size:16.5px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;letter-spacing:-.2px;}
+  .sheet-title .close{background:var(--bg);border:none;font-size:18px;color:var(--text-soft);cursor:pointer;width:30px;height:30px;border-radius:50%;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;color:var(--text-soft);margin-bottom:5px;font-weight:800;}
+  .field input,.field select{width:100%;border:1.5px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:13.5px;font-family:"Nanum Gothic",system-ui,sans-serif;}
+  .primary-btn{width:100%;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;margin-top:8px;}
+
+  .setting-card{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;background:var(--bg);}
+  .setting-card .row2{display:flex;gap:8px;}
+  .setting-card .row2>div{flex:1;}
+  .setting-del{width:100%;text-align:center;font-size:12px;color:var(--danger);background:var(--danger-soft);border:none;border-radius:10px;padding:8px;margin-top:8px;cursor:pointer;font-weight:800;}
+  .add-outline-btn{width:100%;background:var(--primary-soft);border:none;color:var(--primary);border-radius:14px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;margin-top:4px;}
+
+  .month-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .chip{border:1.5px solid var(--line);background:var(--surface);border-radius:20px;padding:6px 0;font-size:12px;width:32px;text-align:center;cursor:pointer;font-weight:700;}
+  .chip.active{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:800;}
+
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;background:var(--text);color:#fff;padding:10px 18px;border-radius:24px;font-size:12.5px;font-weight:700;z-index:60;box-shadow:0 8px 20px -6px rgba(0,0,0,.35);opacity:0;transition:opacity .25s ease;pointer-events:none;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="loading" id="loading">수첩을 펼치는 중…</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// Capacitor/일반 브라우저 환경용 localStorage 기반 storage shim
+// (Claude 아티팩트의 window.storage와 동일한 형태의 API를 흉내냅니다)
+(function(){
+  function keyOf(key, shared){ return (shared ? 'shared:' : 'me:') + key; }
+  window.storage = {
+    get: async function(key, shared){
+      var v = localStorage.getItem(keyOf(key, shared));
+      if(v === null) return null;
+      return {key: key, value: v, shared: !!shared};
+    },
+    set: async function(key, value, shared){
+      localStorage.setItem(keyOf(key, shared), value);
+      return {key: key, value: value, shared: !!shared};
+    },
+    delete: async function(key, shared){
+      localStorage.removeItem(keyOf(key, shared));
+      return {key: key, deleted: true, shared: !!shared};
+    },
+    list: async function(prefix, shared){
+      var pfx = keyOf(prefix || '', shared);
+      var keys = [];
+      for(var i=0;i<localStorage.length;i++){
+        var k = localStorage.key(i);
+        if(k.indexOf(pfx) === 0) keys.push(k.slice((shared?'shared:':'me:').length));
+      }
+      return {keys: keys, prefix: prefix, shared: !!shared};
+    }
+  };
+})();
+</script>
+<script>
+(function(){
+  var STORAGE_OK = !!(window.storage && window.storage.get && window.storage.set);
+
+  var DEFAULT_CARDS = [
+    {id:'wooori', bank:'우리카드', product:'LG베스트렌탈', usage:'정수기·식세기 구독 할인',
+     threshold:300000, annualFee:12000, note:'30만원 달성 시 13,000원 · 100만원 달성 시 20,000원 추가 할인'},
+    {id:'shinhan', bank:'신한카드', product:'딥오일', usage:'주유 할인',
+     threshold:300000, annualFee:10000, note:'월 10만원 주유 기준 10,000원 할인'},
+    {id:'check', bank:'체크카드', product:'', usage:'최저실적 초과분 소진용',
+     threshold:435770, annualFee:0, note:'마일리지 8만 채운 뒤, 신용카드 최소실적 초과분은 체크카드로 사용'}
+  ];
+
+  // 메모 하나가 텍스트 설명이면서, 동시에 금액/카드/적용월이 채워져 있으면
+  // 해당 월에 자동으로 "고정 결제"에도 반영됩니다.
+  var DEFAULT_MEMOS = [
+    {id:'m-cartax', text:'자동차세', cardId:'shinhan', amount:112000, months:[6,12]},
+    {id:'m-proptax', text:'재산세', cardId:'shinhan', amount:180000, months:[7,9]},
+    {id:'m-insurance', text:'자동차 보험료', cardId:'check', amount:430000, months:[1]},
+    {id:'m-phone', text:'휴대폰 요금', cardId:'wooori', amount:14000, months:[1,2,3,4,5,6,7,8,9,10,11,12]},
+    {id:'m-note1', text:'신한 고정 결제: 인터넷(19일/고정) · 관리비(24일/변동) · 가스비(말일/변동, 겨울에 증가 가능)', cardId:null, amount:0, months:[]},
+    {id:'m-note2', text:'가스비 말일이 휴일이면 다음달 결제 → 해당 월 고정금액에서 제외', cardId:null, amount:0, months:[]},
+    {id:'m-note3', text:'우선순위: ① 우리·신한은 최소 실적만 유지 → ② 마일리지 8만 채울 때까지 다른 카드 우선 사용 → ③ 이후 초과분은 체크카드 사용', cardId:null, amount:0, months:[]}
+  ];
+
+  var cards = DEFAULT_CARDS;
+  var memos = DEFAULT_MEMOS.map(function(m){ return Object.assign({}, m, {months:m.months.slice()}); });
+  var monthKey = currentMonthKey();
+  var monthData = {};
+  var modal = null; // 'cards' | 'memos' | 'quickadd'
+  var quickAddDraft = {cardId:null, amount:'', memo:'', date: todayStr()};
+
+  function todayStr(){
+    var d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function currentMonthKey(){
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+  function shiftMonth(key, delta){
+    var parts = key.split('-'); var y = parseInt(parts[0],10); var m = parseInt(parts[1],10);
+    m += delta;
+    while(m>12){m-=12;y+=1;} while(m<1){m+=12;y-=1;}
+    return y + '-' + String(m).padStart(2,'0');
+  }
+  function monthLabel(key){
+    var parts = key.split('-');
+    return parts[0]+'년 '+parseInt(parts[1],10)+'월';
+  }
+  function won(n){ n = Math.round(n||0); return n.toLocaleString('ko-KR') + '원'; }
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+
+  function emptyMonthData(){
+    var d = {__meta:{appliedRecurring:[]}};
+    cards.forEach(function(c){ d[c.id] = {fixed:[], tx:[]}; });
+    return d;
+  }
+
+  async function safeGet(key){
+    try{ var r = await window.storage.get(key,false); return r ? r.value : null; }catch(e){ return null; }
+  }
+  async function safeSet(key, value){
+    try{ await window.storage.set(key, value, false); return true; }catch(e){ console.error('storage set failed', key, e); return false; }
+  }
+
+  async function loadAll(){
+    if(STORAGE_OK){
+      try{
+        var c = await safeGet('cards-config'); if(c) cards = JSON.parse(c);
+        var m = await safeGet('memos');
+        if(m){
+          memos = JSON.parse(m);
+        } else {
+          // 예전 버전(정기 지출 / 참고 메모가 분리돼 있던 버전) 데이터 마이그레이션
+          var rc = await safeGet('recurring-config');
+          var n = await safeGet('notes');
+          var migrated = [];
+          if(rc){
+            JSON.parse(rc).forEach(function(r){ migrated.push({id:r.id, text:r.label, cardId:r.cardId, amount:r.amount, months:r.months}); });
+          }
+          if(n){
+            JSON.parse(n).forEach(function(t,i){ migrated.push({id:'note-'+i+'-'+uid(), text:t, cardId:null, amount:0, months:[]}); });
+          }
+          if(migrated.length>0){ memos = migrated; await persistMemos(); }
+        }
+      }catch(e){ console.error(e); }
+    }
+    await loadMonth(monthKey);
+    render();
+  }
+
+  async function loadMonth(key){
+    if(!STORAGE_OK){ monthData = emptyMonthData(); applyRecurring(); return; }
+    try{
+      var raw = await safeGet('month-'+key);
+      var base = emptyMonthData();
+      if(raw){
+        var parsed = JSON.parse(raw);
+        cards.forEach(function(c){ if(parsed[c.id]) base[c.id] = parsed[c.id]; });
+        if(parsed.__meta) base.__meta = parsed.__meta;
+      }
+      monthData = base;
+    }catch(e){ console.error(e); monthData = emptyMonthData(); }
+    var changed = applyRecurring();
+    if(changed) await persistMonthKey(key);
+  }
+
+  function applyRecurring(){
+    var meta = monthData.__meta || (monthData.__meta = {appliedRecurring:[]});
+    var mm = parseInt(monthKey.split('-')[1],10);
+    var changed = false;
+    memos.forEach(function(rec){
+      if(!rec.cardId || !rec.amount || !rec.months || rec.months.indexOf(mm) === -1) return; // 금액/카드/월이 다 있어야 실적에 반영
+      if(meta.appliedRecurring.indexOf(rec.id) !== -1) return;
+      if(!monthData[rec.cardId]) return; // card no longer exists
+      monthData[rec.cardId].fixed.push({id:uid(), label:rec.text, amount:Number(rec.amount)||0, recurringId:rec.id});
+      meta.appliedRecurring.push(rec.id);
+      changed = true;
+    });
+    return changed;
+  }
+
+  async function persistMonth(){ if(!STORAGE_OK) return; await safeSet('month-'+monthKey, JSON.stringify(monthData)); }
+  async function persistMonthKey(key){ if(!STORAGE_OK) return; await safeSet('month-'+key, JSON.stringify(monthData)); }
+  async function persistCards(){ if(!STORAGE_OK) return; await safeSet('cards-config', JSON.stringify(cards)); }
+  async function persistMemos(){ if(!STORAGE_OK) return; await safeSet('memos', JSON.stringify(memos)); }
+
+  function calc(card){
+    var d = monthData[card.id] || {fixed:[], tx:[]};
+    var fixedTotal = d.fixed.reduce(function(s,i){return s+(Number(i.amount)||0);},0);
+    var txTotal = d.tx.reduce(function(s,i){return s+(Number(i.amount)||0);},0);
+    var used = fixedTotal + txTotal;
+    var remaining = card.threshold - used;
+    var pct = card.threshold>0 ? Math.min(100, Math.max(0,(used/card.threshold)*100)) : 0;
+    return {fixedTotal:fixedTotal, txTotal:txTotal, used:used, remaining:remaining, pct:pct, achieved: remaining<=0};
+  }
+
+  async function changeMonth(delta){
+    monthKey = shiftMonth(monthKey, delta);
+    await loadMonth(monthKey);
+    render();
+  }
+
+  async function copyPrevFixed(cardId){
+    var prevKey = shiftMonth(monthKey, -1);
+    var raw = await safeGet('month-'+prevKey);
+    if(!raw) return;
+    try{
+      var parsed = JSON.parse(raw);
+      var prevFixed = (parsed[cardId] && parsed[cardId].fixed) || [];
+      var manualOnes = prevFixed.filter(function(f){ return !f.recurringId; });
+      if(manualOnes.length===0) return;
+      var cur = monthData[cardId] || {fixed:[],tx:[]};
+      manualOnes.forEach(function(f){ cur.fixed.push({id:uid(), label:f.label, amount:f.amount}); });
+      monthData[cardId] = cur;
+      await persistMonth();
+      render();
+      showToast('지난달 고정 결제를 불러왔어요');
+    }catch(e){ console.error(e); }
+  }
+
+  async function addFixed(cardId, label, amount){
+    if(!label || !amount) return;
+    var cur = monthData[cardId] || {fixed:[],tx:[]};
+    cur.fixed.push({id:uid(), label:label, amount:Number(amount)});
+    monthData[cardId] = cur; await persistMonth(); render();
+  }
+  async function removeFixed(cardId, itemId){
+    var cur = monthData[cardId]; if(!cur) return;
+    cur.fixed = cur.fixed.filter(function(i){return i.id!==itemId;});
+    await persistMonth(); render();
+  }
+  async function addTxToMonth(key, cardId, amount, memo, date){
+    var raw = await safeGet('month-'+key);
+    var base = key===monthKey ? monthData : emptyMonthDataForLoad(raw);
+    if(!base[cardId]) base[cardId] = {fixed:[], tx:[]};
+    base[cardId].tx.push({id:uid(), amount:Number(amount), memo:memo||'', date:date||''});
+    if(key===monthKey){ monthData = base; await persistMonth(); }
+    else { await safeSet('month-'+key, JSON.stringify(base)); }
+  }
+  function emptyMonthDataForLoad(raw){
+    var base = emptyMonthData();
+    if(raw){
+      try{
+        var parsed = JSON.parse(raw);
+        cards.forEach(function(c){ if(parsed[c.id]) base[c.id] = parsed[c.id]; });
+        if(parsed.__meta) base.__meta = parsed.__meta;
+      }catch(e){}
+    }
+    return base;
+  }
+  async function removeTx(cardId, itemId){
+    var cur = monthData[cardId]; if(!cur) return;
+    cur.tx = cur.tx.filter(function(i){return i.id!==itemId;});
+    await persistMonth(); render();
+  }
+  async function addMemo(text){
+    memos.push({id:'memo-'+uid(), text:text||'새 메모', cardId:null, amount:0, months:[]});
+    await persistMemos(); render();
+  }
+  async function removeMemo(id){
+    memos = memos.filter(function(m){return m.id!==id;});
+    await persistMemos(); render();
+  }
+
+  function showToast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2200);
+  }
+
+  /* ---------- quick add ---------- */
+  async function submitQuickAdd(){
+    var d = quickAddDraft;
+    if(!d.cardId || !d.amount) { showToast('카드와 금액을 입력해주세요'); return; }
+    var targetKey = (d.date||todayStr()).slice(0,7);
+    await addTxToMonth(targetKey, d.cardId, d.amount, d.memo, d.date);
+    var jumped = targetKey !== monthKey;
+    if(jumped){ monthKey = targetKey; await loadMonth(monthKey); }
+    modal = null;
+    quickAddDraft = {cardId:cards[0]?cards[0].id:null, amount:'', memo:'', date: todayStr()};
+    render();
+    showToast(jumped ? monthLabel(targetKey)+' 내역으로 기록했어요' : '사용 내역을 기록했어요');
+  }
+
+  /* ---------- card settings ---------- */
+  async function updateCardField(id, field, value){
+    var c = cards.find(function(x){return x.id===id;});
+    if(!c) return;
+    if(field==='threshold' || field==='annualFee') c[field] = Number(value)||0;
+    else c[field] = value;
+    await persistCards();
+  }
+  async function addCard(){
+    cards.push({id:'card-'+uid(), bank:'새 카드', product:'', usage:'', threshold:0, annualFee:0, note:''});
+    await persistCards();
+    render();
+  }
+  async function deleteCard(id){
+    cards = cards.filter(function(c){return c.id!==id;});
+    // 삭제된 카드를 참조하던 메모는 카드 연결만 해제 (텍스트 메모로 남김)
+    memos.forEach(function(m){ if(m.cardId===id){ m.cardId=null; m.amount=0; m.months=[]; } });
+    await persistCards(); await persistMemos();
+    render();
+  }
+
+  /* ---------- 메모 (참고 메모 + 정기 지출 통합) ---------- */
+  async function updateMemoField(id, field, value){
+    var m = memos.find(function(x){return x.id===id;});
+    if(!m) return;
+    if(field==='amount') m.amount = Number(value)||0;
+    else if(field==='cardId') m.cardId = value || null;
+    else m[field] = value;
+    await persistMemos();
+  }
+  async function toggleMemoMonth(id, mm){
+    var m = memos.find(function(x){return x.id===id;});
+    if(!m) return;
+    var idx = m.months.indexOf(mm);
+    if(idx===-1) m.months.push(mm); else m.months.splice(idx,1);
+    m.months.sort(function(a,b){return a-b;});
+    await persistMemos();
+    render();
+  }
+  async function addMemoDetailed(){
+    memos.push({id:'memo-'+uid(), text:'새 메모', cardId:null, amount:0, months:[]});
+    await persistMemos();
+    render();
+  }
+
+  function esc(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function cardOptionsHtml(selectedId, includeNone){
+    var html = '';
+    if(includeNone) html += '<option value=""'+(!selectedId?' selected':'')+'>실적에 반영 안 함 (텍스트 메모만)</option>';
+    html += cards.map(function(c){
+      return '<option value="'+c.id+'"'+(c.id===selectedId?' selected':'')+'>'+esc(c.bank)+(c.product?' · '+esc(c.product):'')+'</option>';
+    }).join('');
+    return html;
+  }
+
+  /* ---------- render ---------- */
+  function render(){
+    var app = document.getElementById('app');
+    var monthTotalNeeded = 0, monthTotalUsed = 0;
+    cards.forEach(function(c){ var r = calc(c); monthTotalNeeded += c.threshold; monthTotalUsed += Math.min(r.used, c.threshold); });
+
+    var html = '';
+    html += '<div class="cover">';
+    html += '  <div class="cover-title"><span class="dot"></span>카드 실적 수첩</div>';
+    html += '  <div class="cover-tools">';
+    html += '    <button class="tool-btn" id="openCardSettings">⚙ 카드 설정</button>';
+    html += '    <button class="tool-btn" id="openMemos">📝 메모 설정</button>';
+    html += '  </div>';
+    html += '  <div class="month-nav">';
+    html += '    <button id="prevBtn">‹</button>';
+    html += '    <div class="month-label">'+monthLabel(monthKey)+'</div>';
+    html += '    <button id="nextBtn">›</button>';
+    html += '  </div>';
+    html += '  <div class="month-total"><div class="label">이번 달 실적 진행</div><div class="value">'+won(monthTotalUsed)+' / '+won(monthTotalNeeded)+'</div></div>';
+    html += '</div>';
+
+    html += '<div class="page">';
+    html += '<div class="section-title">카드별 실적</div>';
+
+    cards.forEach(function(card){
+      var r = calc(card);
+      var d = monthData[card.id] || {fixed:[], tx:[]};
+      html += '<div class="card">';
+      html += '  <div class="card-top">';
+      html += '    <div><span class="card-name"><span class="bank">'+esc(card.bank)+(card.product?' · '+esc(card.product):'')+'</span>'+esc(card.usage||'')+'</span>';
+      if(card.note) html += '<div class="card-note">'+esc(card.note)+'</div>';
+      html += '    </div>';
+      html += '    <div class="stamp'+(r.achieved?' show':'')+'">달성</div>';
+      html += '  </div>';
+      html += '  <div class="bar-track"><div class="bar-fill'+(r.achieved?' ok':'')+'" style="width:'+r.pct.toFixed(1)+'%"></div></div>';
+      html += '  <div class="amounts"><span class="used">'+won(r.used)+'</span><span class="goal">목표 '+won(card.threshold)+'</span></div>';
+      html += '  <div class="remain-row"><span class="rlabel">남은 실적</span><span class="rvalue '+(r.achieved?'ok':'pending')+'">'+(r.achieved?'실적 달성':won(r.remaining))+'</span></div>';
+
+      html += '  <details class="more"><summary></summary><div class="detail-body">';
+      html += '    <div class="subtitle-mini">고정 결제 ('+won(r.fixedTotal)+')</div>';
+      if(d.fixed.length===0){ html += '<div class="empty-hint">등록된 고정 결제가 없습니다</div>'; }
+      d.fixed.forEach(function(f){
+        html += '<div class="row-line"><span class="rl-label">'+(f.recurringId?'<span class="tag-recurring">정기</span>':'')+esc(f.label)+'</span><span class="rl-amt">'+won(f.amount)+'<button class="rl-del" data-act="delfixed" data-card="'+card.id+'" data-item="'+f.id+'">×</button></span></div>';
+      });
+      html += '    <div class="add-form">';
+      html += '      <input type="text" class="memo" placeholder="항목명" id="fl-'+card.id+'">';
+      html += '      <input type="number" class="amt" placeholder="금액" id="fa-'+card.id+'">';
+      html += '      <button data-act="addfixed" data-card="'+card.id+'">추가</button>';
+      html += '    </div>';
+      html += '    <button class="copy-btn" data-act="copyprev" data-card="'+card.id+'">지난달 고정 결제 불러오기</button>';
+
+      html += '    <div class="subtitle-mini" style="margin-top:14px;">추가 사용 내역 ('+won(r.txTotal)+')</div>';
+      if(d.tx.length===0){ html += '<div class="empty-hint">기록된 사용 내역이 없습니다</div>'; }
+      d.tx.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(t){
+        var lbl = (t.date? t.date+' · ':'') + (t.memo || '사용 내역');
+        html += '<div class="row-line"><span class="rl-label">'+esc(lbl)+'</span><span class="rl-amt">'+won(t.amount)+'<button class="rl-del" data-act="deltx" data-card="'+card.id+'" data-item="'+t.id+'">×</button></span></div>';
+      });
+      html += '  </div></details>';
+      html += '</div>';
+    });
+
+    html += '<div class="section-title">참고 메모</div>';
+    html += '<div class="notes-card">';
+    if(memos.length===0){ html += '<div class="empty-hint">메모가 없습니다</div>'; }
+    memos.forEach(function(m){
+      var badge = '';
+      if(m.cardId && m.amount>0 && m.months.length>0){
+        var mc = cards.find(function(c){return c.id===m.cardId;});
+        badge = '<span class="tag-recurring">실적 반영</span> '+(mc?esc(mc.bank)+' · ':'')+m.months.join(',')+'월 · '+won(m.amount);
+      }
+      html += '<div class="note-line"><span class="mark">·</span><span>'+esc(m.text)+(badge?'<br><span style="font-size:10.5px;">'+badge+'</span>':'')+'</span><button class="del" data-act="delmemo" data-id="'+m.id+'">×</button></div>';
+    });
+    html += '  <div class="note-add"><input type="text" id="noteInput" placeholder="메모 추가 (금액/카드 설정은 메모 설정에서)"><button data-act="addnote">추가</button></div>';
+    html += '</div>';
+
+    html += '<div class="footer-note">금액·카드·적용월을 채운 메모는 해당 월 고정 결제에 자동으로 반영돼요 · 모든 기록은 이 브라우저 계정에 저장됩니다</div>';
+    html += '</div>';
+
+    html += '<button class="fab" id="fabAdd">+</button>';
+
+    if(modal==='quickadd') html += renderQuickAddModal();
+    if(modal==='cards') html += renderCardSettingsModal();
+    if(modal==='memos') html += renderMemoModal();
+
+    app.innerHTML = html;
+    bindEvents();
+  }
+
+  function renderQuickAddModal(){
+    var d = quickAddDraft;
+    if(!d.cardId && cards[0]) d.cardId = cards[0].id;
+    var h = '<div class="overlay" id="ovQuick"><div class="sheet">';
+    h += '<div class="sheet-title">소비 기록하기<button class="close" data-act="closeModal">×</button></div>';
+    h += '<div class="field"><label>카드</label><select id="qaCard">'+cardOptionsHtml(d.cardId)+'</select></div>';
+    h += '<div class="field"><label>금액</label><input type="number" class="mono" id="qaAmount" placeholder="예: 25000" value="'+esc(d.amount)+'"></div>';
+    h += '<div class="field"><label>메모</label><input type="text" id="qaMemo" placeholder="예: 마트 장보기" value="'+esc(d.memo)+'"></div>';
+    h += '<div class="field"><label>날짜</label><input type="date" id="qaDate" value="'+esc(d.date)+'"></div>';
+    h += '<button class="primary-btn" id="qaSubmit">기록하기</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function renderCardSettingsModal(){
+    var h = '<div class="overlay" id="ovCards"><div class="sheet">';
+    h += '<div class="sheet-title">카드 설정<button class="close" data-act="closeModal">×</button></div>';
+    cards.forEach(function(c){
+      h += '<div class="setting-card">';
+      h += '  <div class="row2"><div class="field"><label>카드사</label><input type="text" data-cf="bank" data-id="'+c.id+'" value="'+esc(c.bank)+'"></div>';
+      h += '  <div class="field"><label>상품명</label><input type="text" data-cf="product" data-id="'+c.id+'" value="'+esc(c.product)+'"></div></div>';
+      h += '  <div class="field"><label>혜택 조건 (사용처)</label><input type="text" data-cf="usage" data-id="'+c.id+'" value="'+esc(c.usage)+'"></div>';
+      h += '  <div class="row2"><div class="field"><label>실적 목표 금액</label><input type="number" class="mono" data-cf="threshold" data-id="'+c.id+'" value="'+c.threshold+'"></div>';
+      h += '  <div class="field"><label>연회비</label><input type="number" class="mono" data-cf="annualFee" data-id="'+c.id+'" value="'+c.annualFee+'"></div></div>';
+      h += '  <div class="field"><label>혜택 설명 메모</label><input type="text" data-cf="note" data-id="'+c.id+'" value="'+esc(c.note)+'"></div>';
+      h += '  <button class="setting-del" data-act="delcard" data-id="'+c.id+'">이 카드 삭제</button>';
+      h += '</div>';
+    });
+    h += '<button class="add-outline-btn" id="addCardBtn">+ 카드 추가</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function renderMemoModal(){
+    var monthNames = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+    var h = '<div class="overlay" id="ovMemos"><div class="sheet">';
+    h += '<div class="sheet-title">메모 설정<button class="close" data-act="closeModal">×</button></div>';
+    h += '<div class="empty-hint" style="text-align:left;padding:0 0 14px;">카드·금액·적용 월을 채우면 해당 월 고정 결제에 자동으로 반영돼요. 비워두면 텍스트 메모로만 남아요.</div>';
+    if(memos.length===0) h += '<div class="empty-hint">등록된 메모가 없습니다</div>';
+    memos.forEach(function(m){
+      h += '<div class="setting-card">';
+      h += '  <div class="field"><label>메모 내용</label><input type="text" data-mf="text" data-id="'+m.id+'" value="'+esc(m.text)+'"></div>';
+      h += '  <div class="field"><label>연결 카드 (실적 반영 대상)</label><select data-mf="cardId" data-id="'+m.id+'">'+cardOptionsHtml(m.cardId, true)+'</select></div>';
+      h += '  <div class="field"><label>금액</label><input type="number" class="mono" data-mf="amount" data-id="'+m.id+'" value="'+m.amount+'"></div>';
+      h += '  <label style="display:block;font-size:11px;color:var(--text-soft);margin-top:8px;font-weight:800;">적용 월</label>';
+      h += '  <div class="month-chips">';
+      monthNames.forEach(function(mn, i){
+        var mm = i+1;
+        h += '<div class="chip'+(m.months.indexOf(mm)!==-1?' active':'')+'" data-act="togglemonth" data-id="'+m.id+'" data-m="'+mm+'">'+mn+'</div>';
+      });
+      h += '  </div>';
+      h += '  <button class="setting-del" data-act="delmemosetting" data-id="'+m.id+'">삭제</button>';
+      h += '</div>';
+    });
+    h += '<button class="add-outline-btn" id="addMemoBtn">+ 메모 추가</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function bindEvents(){
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+    if(prevBtn) prevBtn.onclick = function(){ changeMonth(-1); };
+    if(nextBtn) nextBtn.onclick = function(){ changeMonth(1); };
+
+    var fab = document.getElementById('fabAdd');
+    if(fab) fab.onclick = function(){ modal='quickadd'; render(); };
+    var ocs = document.getElementById('openCardSettings');
+    if(ocs) ocs.onclick = function(){ modal='cards'; render(); };
+    var omm = document.getElementById('openMemos');
+    if(omm) omm.onclick = function(){ modal='memos'; render(); };
+
+    document.querySelectorAll('[data-act="closeModal"]').forEach(function(b){ b.onclick = function(){ modal=null; render(); }; });
+    ['ovQuick','ovCards','ovMemos'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.addEventListener('click', function(e){ if(e.target===el){ modal=null; render(); } });
+    });
+
+    document.querySelectorAll('[data-act="addfixed"]').forEach(function(btn){
+      btn.onclick = function(){
+        var cardId = btn.getAttribute('data-card');
+        var label = document.getElementById('fl-'+cardId).value.trim();
+        var amount = document.getElementById('fa-'+cardId).value;
+        addFixed(cardId, label, amount);
+      };
+    });
+    document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn){
+      btn.onclick = function(){ removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item')); };
+    });
+    document.querySelectorAll('[data-act="deltx"]').forEach(function(btn){
+      btn.onclick = function(){ removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item')); };
+    });
+    document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn){
+      btn.onclick = function(){ copyPrevFixed(btn.getAttribute('data-card')); };
+    });
+    var addNoteBtn = document.querySelector('[data-act="addnote"]');
+    if(addNoteBtn){
+      addNoteBtn.onclick = function(){
+        var v = document.getElementById('noteInput').value.trim();
+        if(v) addMemo(v);
+      };
+    }
+    document.querySelectorAll('[data-act="delmemo"]').forEach(function(btn){
+      btn.onclick = function(){ removeMemo(btn.getAttribute('data-id')); };
+    });
+
+    // quick add modal
+    var qaSubmit = document.getElementById('qaSubmit');
+    if(qaSubmit){
+      qaSubmit.onclick = function(){
+        quickAddDraft.cardId = document.getElementById('qaCard').value;
+        quickAddDraft.amount = document.getElementById('qaAmount').value;
+        quickAddDraft.memo = document.getElementById('qaMemo').value.trim();
+        quickAddDraft.date = document.getElementById('qaDate').value || todayStr();
+        submitQuickAdd();
+      };
+    }
+
+    // card settings modal
+    document.querySelectorAll('[data-cf]').forEach(function(inp){
+      inp.onchange = function(){ updateCardField(inp.getAttribute('data-id'), inp.getAttribute('data-cf'), inp.value); };
+    });
+    var addCardBtn = document.getElementById('addCardBtn');
+    if(addCardBtn) addCardBtn.onclick = addCard;
+    document.querySelectorAll('[data-act="delcard"]').forEach(function(btn){
+      btn.onclick = function(){ deleteCard(btn.getAttribute('data-id')); };
+    });
+
+    // memo settings modal
+    document.querySelectorAll('[data-mf]').forEach(function(inp){
+      inp.onchange = function(){ updateMemoField(inp.getAttribute('data-id'), inp.getAttribute('data-mf'), inp.value); };
+    });
+    var addMemoBtn = document.getElementById('addMemoBtn');
+    if(addMemoBtn) addMemoBtn.onclick = addMemoDetailed;
+    document.querySelectorAll('[data-act="delmemosetting"]').forEach(function(btn){
+      btn.onclick = function(){ removeMemo(btn.getAttribute('data-id')); };
+    });
+    document.querySelectorAll('[data-act="togglemonth"]').forEach(function(chip){
+      chip.onclick = function(){ toggleMemoMonth(chip.getAttribute('data-id'), parseInt(chip.getAttribute('data-m'),10)); };
+    });
+  }
+
+  loadAll();
+})();
+</script>
+</body>
+</html>
