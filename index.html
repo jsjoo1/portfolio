@@ -382,10 +382,13 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
 .note-line:last-child { border-bottom: none; }
 .note-line mark { color: var(--primary); background: none; font-weight: 800; flex: none; }
 
+/* 메모 입력 영역 상단 배치 스타일 조정 */
 .note-add {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
 }
 
 .note-add input {
@@ -406,6 +409,7 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
   padding: 10px 16px;
   font-size: 13px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .empty-hint {
@@ -715,7 +719,6 @@ async function persistMemos() {
   await setDoc(doc(db, "app_data", "memos"), { data: memos });
 }
 
-/* 정기 결제 메모 적용 함수 수정 (대소문자 오타 수정 및 중복검사 개선) */
 function applyRecurring() {
   var meta = monthData._meta || (monthData._meta = {appliedRecurring: []});
   var mm = parseInt(monthKey.split('-')[1], 10);
@@ -1010,6 +1013,10 @@ function render() {
 
   html += '  <div class="section-title">참고 메모</div>';
   html += '  <div class="notes-card">';
+  
+  /* 메모 추가 입력창 상단 배치 */
+  html += '    <div class="note-add"><input type="text" id="noteInput" placeholder="메모 추가..."><button data-act="addnote">등록</button></div>';
+
   if (memos.length === 0) { html += '    <div class="empty-hint">등록된 메모가 없습니다</div>'; }
   memos.forEach(function(m) {
     var badge = '';
@@ -1021,7 +1028,6 @@ function render() {
     html += '    <div class="note-line"><mark>•</mark><span>' + esc(m.text) + (badge ? '<br><span style="font-size: 11px; opacity:0.8;">' + badge + '</span>' : '') + '</span><button class="rl-del" data-act="delmemo" data-id="' + m.id + '" style="margin-left:auto;">✕</button></div>';
   });
 
-  html += '    <div class="note-add"><input type="text" id="noteInput" placeholder="메모 추가..."><button data-act="addnote">등록</button></div>';
   html += '  </div>';
 
   html += '  <div class="footer-note">뱅크샐러드 라이크 다크 테마 적용됨 • 실시간 클라우드 동기화 중</div>';
