@@ -861,11 +861,10 @@ function applyRecurring() {
     if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
     
     var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
-    if (!exists) {
+    var alreadyApplied = meta.appliedRecurring.indexOf(rec.id) !== -1;
+    if (!exists && !alreadyApplied) {
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
-      if (meta.appliedRecurring.indexOf(rec.id) === -1) {
-        meta.appliedRecurring.push(rec.id);
-      }
+      meta.appliedRecurring.push(rec.id);
       changed = true;
     }
   });
