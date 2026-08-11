@@ -829,11 +829,13 @@ async function removeTx(cardId, itemId) {
 }
 
 async function addMemo(text) {
-  memos.push({id: 'memo-' + uid(), text: text || '새 메모', cardId: null, amount: 0, months: []});
+  memos.unshift({id: 'memo-' + uid(), text: text || '새 메모', cardId: null, amount: 0, months: []});
   await persistMemos();
 }
 
+/* 삭제 시 Confirm 팝업 적용 */
 async function removeMemo(id) {
+  if (!confirm('해당 메모를 정말 삭제하시겠습니까?')) return;
   memos = memos.filter(function(m) { return m.id !== id; });
   await persistMemos();
 }
@@ -872,7 +874,12 @@ async function addCard() {
   await persistCards();
 }
 
+/* 카드 삭제 시 Confirm 팝업 적용 */
 async function deleteCard(id) {
+  var targetCard = cards.find(function(c) { return c.id === id; });
+  var cardName = targetCard ? targetCard.bank : '해당 카드';
+  if (!confirm(cardName + '를 정말 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.')) return;
+
   cards = cards.filter(function(c) { return c.id !== id; });
   memos.forEach(function(m) { if ((m.cardId || m.cardid) === id) { m.cardId = null; m.cardid = null; m.amount = 0; m.months = []; } });
   await persistCards(); await persistMemos();
@@ -1054,13 +1061,11 @@ function renderCardSettingsModal() {
   return h;
 }
 
-/* [핵심 수정 위치] 메모 설정 팝업(모달) 상단에 "+ 새 메모 추가" 버튼 배치 */
 function renderMemoModal() {
   var monthNames = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
   var h = '<div class="overlay" id="ovMemos"><div class="sheet">';
   h += '  <div class="sheet-title">메모 설정<button class="close" data-act="closeModal">✕</button></div>';
   
-  /* 팝업 제목 바로 아래로 버튼 이동 */
   h += '  <button class="add-outline-btn" id="addMemoBtn">+ 새 메모 추가</button>';
   
   if (memos.length === 0) h += '  <div class="empty-hint">등록된 메모가 없습니다</div>';
