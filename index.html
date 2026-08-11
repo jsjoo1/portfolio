@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <!-- [수정된 파비콘 코드] -->
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="favicon.svg">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>카드 실적 수첩</title>
+
+<!-- [신규 적용] 동일 경로의 favicon.svg 연동 -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="favicon.svg">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -1085,13 +1087,11 @@ async function updateMemoField(id, field, value) {
   await persistMemos();
 }
 
-/* [신규] 특정 메모의 적용 월 토글 / 전체 토글 처리 */
 async function toggleMemoMonth(id, mm) {
   var m = memos.find(function(x) { return x.id === id; });
   if (!m) return;
 
   if (mm === 'all') {
-    // 12개 월이 이미 다 켜져 있으면 전체 해제, 아니면 전체 선택
     if (m.months.length === 12) {
       m.months = [];
     } else {
@@ -1224,7 +1224,6 @@ function render() {
   html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000"></div>';
   html += '        <div class="field"><label>적용 월 선택</label>';
   html += '          <div class="month-chips">';
-  /* [추가] 전체 월 선택 칩 */
   html += '            <div class="chip chip-all' + (isAllSelectedTop ? ' active' : '') + '" data-act="toggleTopAllM">전체</div>';
   monthNames.forEach(function(mn, i) {
     var mm = i + 1;
@@ -1340,7 +1339,6 @@ function renderMemoModal() {
     h += '    <div class="field"><label>금액</label><input type="number" data-mf="amount" data-id="' + m.id + '" value="' + m.amount + '"></div>';
     h += '    <label style="display:block; font-size:12px; color:var(--text-soft); margin-top:8px; font-weight:700;">적용 월 선택</label>';
     h += '    <div class="month-chips">';
-    /* [추가] 모달 내 메모 설정 전체 월 선택 칩 */
     h += '      <div class="chip chip-all' + (isAllSelected ? ' active' : '') + '" data-act="togglemonth" data-id="' + m.id + '" data-m="all">전체</div>';
     monthNames.forEach(function(mn, i) {
       var mm = i + 1;
@@ -1414,7 +1412,6 @@ function bindEvents() {
     };
   }
 
-  /* 상단 입력폼 전체 선택 버튼 이벤트 */
   var toggleTopAllMBtn = document.querySelector('[data-act="toggleTopAllM"]');
   if (toggleTopAllMBtn) {
     toggleTopAllMBtn.onclick = function() {
