@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>신용카드 실적</title>
+<title>카드 실적 수첩</title>
 
 <!-- 파비콘 연동 -->
 <link rel="icon" href="favicon.png?v=2" type="image/png">
@@ -133,6 +133,17 @@ body {
   letter-spacing: -0.5px;
   border-bottom: 1px dashed var(--text-soft);
   padding-bottom: 1px;
+}
+
+/* 숨겨진 실제 월 선택 달력 인풋 */
+#monthPickerInput {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .summary-card {
@@ -796,10 +807,6 @@ var resetType = 'txOnly';
 var quickAddDraft = {cardId: null, amount: '', memo: '', date: todayStr()};
 var monthUnsubscribe = null;
 var newMemoMonths = [];
-var newMemoText = '';
-var newMemoCardId = '';
-var newMemoAmount = '';
-var topNoteOptOpen = false;
 var editingFixedId = null;
 var editingMemoId = null;
 var expandedCards = {};
@@ -865,10 +872,11 @@ function applyRecurring() {
     if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
     
     var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
-    var alreadyApplied = meta.appliedRecurring.indexOf(rec.id) !== -1;
-    if (!exists && !alreadyApplied) {
+    if (!exists) {
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
-      meta.appliedRecurring.push(rec.id);
+      if (meta.appliedRecurring.indexOf(rec.id) === -1) {
+        meta.appliedRecurring.push(rec.id);
+      }
       changed = true;
     }
   });
@@ -909,16 +917,23 @@ async function reloadMemosToMonth() {
   }
 }
 
+/* [버그 수정됨] 카드가 없는 상태에서 데이터 덮어씌움(초기화) 문제 해결 로직 */
 function subscribeMonth(key) {
   if (monthUnsubscribe) monthUnsubscribe();
   monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
-    var base = emptyMonthData();
     if (docSnap.exists()) {
       var parsed = docSnap.data();
-      cards.forEach(function(c) { if (parsed[c.id]) base[c.id] = parsed[c.id]; });
-      if (parsed._meta) base._meta = parsed._meta;
+      monthData = parsed;
+      if (!monthData._meta) monthData._meta = {appliedRecurring: [], skipRecurring: false};
+    } else {
+      monthData = emptyMonthData();
     }
-    monthData = base;
+    
+    // 카드 구조가 누락되었을 경우에 대비
+    cards.forEach(function(c) {
+      if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
+    });
+
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
@@ -929,6 +944,9 @@ function initRealtimeListeners() {
   onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
     if (docSnap.exists()) {
       cards = docSnap.data().data || [];
+      cards.forEach(function(c) {
+        if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
+      });
     }
     render();
   });
@@ -1025,12 +1043,13 @@ async function updateFixedAmount(cardId, itemId, newAmount) {
 async function addTxToMonth(key, cardId, amount, memo, date) {
   var docRef = doc(db, "app_data", "month-" + key);
   var docSnap = await getDoc(docRef);
-  var base = emptyMonthData();
+  var base = {};
   if (docSnap.exists()) {
-    var parsed = docSnap.data();
-    cards.forEach(function(c) { if (parsed[c.id]) base[c.id] = parsed[c.id]; });
-    if (parsed._meta) base._meta = parsed._meta;
+    base = docSnap.data();
+  } else {
+    base = emptyMonthData();
   }
+  if (!base._meta) base._meta = {appliedRecurring: [], skipRecurring: false};
   if (!base[cardId]) base[cardId] = {fixed: [], tx: []};
   base[cardId].tx.push({id: uid(), amount: Number(amount), memo: memo, date: date || ''});
   await setDoc(docRef, base);
@@ -1055,10 +1074,6 @@ async function addMemoAdvanced(text, cardId, amount, months) {
     months: months || []
   });
   newMemoMonths = [];
-  newMemoText = '';
-  newMemoCardId = '';
-  newMemoAmount = '';
-  topNoteOptOpen = false;
   await persistMemos();
   showToast('메모를 등록했어요');
 }
@@ -1114,7 +1129,6 @@ async function executeMonthReset() {
   if (resetType === 'restoreRecurring') {
     await reloadMemosToMonth();
     modal = null;
-    render();
     return;
   }
 
@@ -1142,12 +1156,6 @@ async function executeMonthReset() {
 
   await persistMonth();
   modal = null;
-  
-  var base = emptyMonthData();
-  cards.forEach(function(c) { if (monthData[c.id]) base[c.id] = monthData[c.id]; });
-  if (monthData._meta) base._meta = monthData._meta;
-  monthData = base;
-  
   render();
   showToast(label + ' 데이터가 초기화되었습니다');
 }
@@ -1264,7 +1272,7 @@ function render() {
 
   html += '  <div class="month-nav">';
   html += '    <button id="prevBtn">‹</button>';
-  html += '    <div class="month-label-wrapper" id="openMonthPicker" title="터치하여 월 선택">';
+  html += '    <div class="month-label-wrapper" id="openMonthManual" title="터치하여 직접 입력">';
   html += '      <div class="month-label">' + monthLabel(monthKey) + '</div>';
   html += '    </div>';
   html += '    <button id="nextBtn">›</button>';
@@ -1349,13 +1357,13 @@ function render() {
 
   html += '    <div class="note-add-top">';
   html += '      <div class="note-add-input-row">';
-  html += '        <input type="text" id="topNoteText" placeholder="메모 추가..." value="' + esc(newMemoText) + '">';
+  html += '        <input type="text" id="topNoteText" placeholder="메모 추가...">';
   html += '        <button class="opt-toggle-btn" id="toggleNoteOptBtn">옵션 ∨</button>';
   html += '        <button class="add-submit-btn" id="submitTopNoteBtn">등록</button>';
   html += '      </div>';
-  html += '      <div class="note-opt-panel' + (topNoteOptOpen ? ' show' : '') + '" id="topNoteOptPanel">';
-  html += '        <div class="field"><label>실적 반영 카드</label><select id="topNoteCard">' + cardOptionsHtml(newMemoCardId, true) + '</select></div>';
-  html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000" value="' + esc(newMemoAmount) + '"></div>';
+  html += '      <div class="note-opt-panel" id="topNoteOptPanel">';
+  html += '        <div class="field"><label>실적 반영 카드</label><select id="topNoteCard">' + cardOptionsHtml('', true) + '</select></div>';
+  html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000"></div>';
   html += '        <div class="field"><label>적용 월 선택</label>';
   html += '          <div class="month-chips">';
   html += '            <div class="chip chip-all' + (isAllSelectedTop ? ' active' : '') + '" data-act="toggleTopAllM">전체</div>';
@@ -1384,6 +1392,7 @@ function render() {
 
   html += '  </div>';
 
+  html += '  <div class="footer-note">뱅크샐러드 라이크 다크 테마 적용됨 • 실시간 클라우드 동기화 중</div>';
   html += '</div>';
 
   html += '<button class="fab" id="fabAdd">+</button>';
@@ -1393,7 +1402,6 @@ function render() {
   if (modal === 'memos') html += renderMemoModal();
   if (modal === 'reset') html += renderResetModal();
   if (modal === 'editmemo') html += renderEditMemoModal();
-  if (modal === 'monthpicker') html += renderMonthPickerModal();
 
   app.innerHTML = html;
   bindEvents();
@@ -1402,34 +1410,6 @@ function render() {
     var editInp = document.getElementById('editAmtInput-' + editingFixedId);
     if (editInp) { editInp.focus(); editInp.select(); }
   }
-}
-
-function renderMonthPickerModal() {
-  var parts = monthKey.split('-');
-  var curYear = parseInt(parts[0], 10);
-  var curMonth = parseInt(parts[1], 10);
-
-  var h = '<div class="overlay" id="ovMonthPicker"><div class="sheet">';
-  h += '  <div class="sheet-title">조회할 연도 및 월 선택<button class="close" data-act="closeModal">✕</button></div>';
-  
-  h += '  <div class="row2" style="display:flex; gap:12px; margin-bottom:12px;">';
-  h += '    <div class="field" style="flex:1;"><label>연도 (2000~2099)</label><select id="pickerYear">';
-  for (var y = 2000; y <= 2099; y++) {
-    h += '      <option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '년</option>';
-  }
-  h += '    </select></div>';
-
-  h += '    <div class="field" style="flex:1;"><label>월</label><select id="pickerMonth">';
-  for (var m = 1; m <= 12; m++) {
-    h += '      <option value="' + m + '"' + (m === curMonth ? ' selected' : '') + '>' + m + '월</option>';
-  }
-  h += '    </select></div>';
-  h += '  </div>';
-
-  h += '  <button class="secondary-btn" id="pickerCurrentMonth">이번 달 선택</button>';
-  h += '  <button class="primary-btn" id="pickerSubmit">이동하기</button>';
-  h += '</div></div>';
-  return h;
 }
 
 function renderEditMemoModal() {
@@ -1556,31 +1536,30 @@ function bindEvents() {
   if (prevBtn) prevBtn.onclick = function() { changeMonth(-1); };
   if (nextBtn) nextBtn.onclick = function() { changeMonth(1); };
 
-  var openMonthPicker = document.getElementById('openMonthPicker');
-  if (openMonthPicker) {
-    openMonthPicker.onclick = function() {
-      modal = 'monthpicker';
-      render();
-    };
-  }
+  var openMonthManual = document.getElementById('openMonthManual');
+  if (openMonthManual) {
+    openMonthManual.onclick = function() {
+      var input = prompt("조회할 연-월을 입력하세요\n(예: 2026-08 또는 202608)", monthKey);
+      if (input) {
+        input = input.trim();
+        let targetKey = "";
+        
+        if (/^\d{6}$/.test(input)) {
+          targetKey = input.slice(0, 4) + '-' + input.slice(4, 6);
+        } else if (/^\d{4}-\d{1,2}$/.test(input)) {
+          var parts = input.split('-');
+          targetKey = parts[0] + '-' + String(parts[1]).padStart(2, '0');
+        } else if (/^\d{4}-\d{2}$/.test(input)) {
+          targetKey = input;
+        }
 
-  var pickerSubmit = document.getElementById('pickerSubmit');
-  if (pickerSubmit) {
-    pickerSubmit.onclick = function() {
-      var y = document.getElementById('pickerYear').value;
-      var m = document.getElementById('pickerMonth').value;
-      monthKey = y + '-' + String(m).padStart(2, '0');
-      modal = null;
-      subscribeMonth(monthKey);
-    };
-  }
-
-  var pickerCurrentMonth = document.getElementById('pickerCurrentMonth');
-  if (pickerCurrentMonth) {
-    pickerCurrentMonth.onclick = function() {
-      monthKey = currentMonthKey();
-      modal = null;
-      subscribeMonth(monthKey);
+        if (targetKey) {
+          monthKey = targetKey;
+          subscribeMonth(monthKey);
+        } else {
+          showToast('형식이 올바르지 않아요 (예: 2026-08)');
+        }
+      }
     };
   }
 
@@ -1603,7 +1582,7 @@ function bindEvents() {
     b.onclick = function() { modal = null; render(); };
   });
 
-  ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo', 'ovMonthPicker'].forEach(function(id) {
+  ['ovQuick', 'ovCards', 'ovMemos', 'ovReset', 'ovEditMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', function(e) { if (e.target === el) { modal = null; render(); } });
   });
@@ -1621,25 +1600,9 @@ function bindEvents() {
   var toggleNoteOptBtn = document.getElementById('toggleNoteOptBtn');
   if (toggleNoteOptBtn) {
     toggleNoteOptBtn.onclick = function() {
-      topNoteOptOpen = !topNoteOptOpen;
       var panel = document.getElementById('topNoteOptPanel');
-      if (panel) panel.classList.toggle('show', topNoteOptOpen);
+      if (panel) panel.classList.toggle('show');
     };
-  }
-
-  var topNoteTextInp = document.getElementById('topNoteText');
-  if (topNoteTextInp) {
-    topNoteTextInp.oninput = function() { newMemoText = topNoteTextInp.value; };
-  }
-
-  var topNoteCardSel = document.getElementById('topNoteCard');
-  if (topNoteCardSel) {
-    topNoteCardSel.onchange = function() { newMemoCardId = topNoteCardSel.value; };
-  }
-
-  var topNoteAmountInp = document.getElementById('topNoteAmount');
-  if (topNoteAmountInp) {
-    topNoteAmountInp.oninput = function() { newMemoAmount = topNoteAmountInp.value; };
   }
 
   var submitTopNoteBtn = document.getElementById('submitTopNoteBtn');
@@ -1661,8 +1624,9 @@ function bindEvents() {
       } else {
         newMemoMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
       }
-      topNoteOptOpen = true;
       render();
+      var panel = document.getElementById('topNoteOptPanel');
+      if (panel) panel.classList.add('show');
     };
   }
 
@@ -1672,8 +1636,9 @@ function bindEvents() {
       var idx = newMemoMonths.indexOf(mm);
       if (idx === -1) newMemoMonths.push(mm); else newMemoMonths.splice(idx, 1);
       newMemoMonths.sort(function(a, b) { return a - b; });
-      topNoteOptOpen = true;
       render();
+      var panel = document.getElementById('topNoteOptPanel');
+      if (panel) panel.classList.add('show');
     };
   });
 
@@ -1766,21 +1731,19 @@ function bindEvents() {
     };
   });
 
-  /* [수정 완료] 고정 결제 삭제 버튼 클릭 이벤트 연결 */
+  // [수정 완료] 삭제 및 복원 버튼 이벤트 리스너 바인딩 정상화
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 사용 내역 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
     btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 연결 */
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
     btn.onclick = function() {
       copyPrevFixed(btn.getAttribute('data-card'));
