@@ -675,6 +675,11 @@ details.more[open] > summary::after { content: "내역 접기 ∧"; }
   cursor: pointer;
 }
 
+.chip.chip-all {
+  width: 44px;
+  font-weight: 800;
+}
+
 .chip.active {
   background: var(--primary);
   border-color: var(--primary);
@@ -986,12 +991,10 @@ async function removeMemo(id) {
   await persistMemos();
 }
 
-/* [개선] 초기화 실행 함수 (3가지 옵션 분기 처리) */
 async function executeMonthReset() {
   var label = monthLabel(monthKey);
 
   if (resetType === 'restoreRecurring') {
-    // 3. 고정결제 금액 복원 (정기 메모 재불러오기 실행)
     await reloadMemosToMonth();
     modal = null;
     render();
@@ -1079,12 +1082,23 @@ async function updateMemoField(id, field, value) {
   await persistMemos();
 }
 
+/* [신규] 특정 메모의 적용 월 토글 / 전체 토글 처리 */
 async function toggleMemoMonth(id, mm) {
   var m = memos.find(function(x) { return x.id === id; });
   if (!m) return;
-  var idx = m.months.indexOf(mm);
-  if (idx === -1) m.months.push(mm); else m.months.splice(idx, 1);
-  m.months.sort(function(a, b) { return a - b; });
+
+  if (mm === 'all') {
+    // 12개 월이 이미 다 켜져 있으면 전체 해제, 아니면 전체 선택
+    if (m.months.length === 12) {
+      m.months = [];
+    } else {
+      m.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    }
+  } else {
+    var idx = m.months.indexOf(mm);
+    if (idx === -1) m.months.push(mm); else m.months.splice(idx, 1);
+    m.months.sort(function(a, b) { return a - b; });
+  }
   await persistMemos();
 }
 
@@ -1194,6 +1208,8 @@ function render() {
   html += '  <div class="notes-card">';
   
   var monthNames = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+  var isAllSelectedTop = newMemoMonths.length === 12;
+
   html += '    <div class="note-add-top">';
   html += '      <div class="note-add-input-row">';
   html += '        <input type="text" id="topNoteText" placeholder="메모 추가...">';
@@ -1205,6 +1221,8 @@ function render() {
   html += '        <div class="field"><label>금액 (원)</label><input type="number" id="topNoteAmount" placeholder="예: 50000"></div>';
   html += '        <div class="field"><label>적용 월 선택</label>';
   html += '          <div class="month-chips">';
+  /* [추가] 전체 월 선택 칩 */
+  html += '            <div class="chip chip-all' + (isAllSelectedTop ? ' active' : '') + '" data-act="toggleTopAllM">전체</div>';
   monthNames.forEach(function(mn, i) {
     var mm = i + 1;
     html += '            <div class="chip' + (newMemoMonths.indexOf(mm) !== -1 ? ' active' : '') + '" data-act="toggleneowmemoM" data-m="' + mm + '">' + mn + '</div>';
@@ -1220,7 +1238,7 @@ function render() {
     var cId = m.cardId || m.cardid;
     if (cId && m.amount > 0 && m.months.length > 0) {
       var mc = cards.find(function(c) { return c.id === cId; });
-      badge = '<span class="tag-recurring">실적 반영</span> ' + (mc ? esc(mc.bank) + ' ' : '') + m.months.join(',') + '월 ' + won(m.amount);
+      badge = '<span class="tag-recurring">실적 반영</span> ' + (mc ? esc(mc.bank) + ' ' : '') + (m.months.length === 12 ? '매월' : m.months.join(',') + '월') + ' ' + won(m.amount);
     }
     html += '    <div class="note-line"><mark>•</mark><span>' + esc(m.text) + (badge ? '<br><span style="font-size: 11px; opacity:0.8;">' + badge + '</span>' : '') + '</span><button class="rl-del" data-act="delmemo" data-id="' + m.id + '" style="margin-left:auto;">✕</button></div>';
   });
@@ -1255,7 +1273,6 @@ function renderQuickAddModal() {
   return h;
 }
 
-/* [개선] 초기화 모달 3번 옵션(고정결제 금액 복원) 추가 */
 function renderResetModal() {
   var h = '<div class="overlay" id="ovReset"><div class="sheet">';
   h += '  <div class="sheet-title">' + monthLabel(monthKey) + ' 데이터 관리<button class="close" data-act="closeModal">✕</button></div>';
@@ -1312,12 +1329,16 @@ function renderMemoModal() {
   if (memos.length === 0) h += '  <div class="empty-hint">등록된 메모가 없습니다</div>';
   memos.forEach(function(m) {
     var selectedCard = m.cardId || m.cardid;
+    var isAllSelected = m.months && m.months.length === 12;
+
     h += '  <div class="setting-card">';
     h += '    <div class="field"><label>메모 내용</label><input type="text" data-mf="text" data-id="' + m.id + '" value="' + esc(m.text) + '"></div>';
     h += '    <div class="field"><label>연결 카드 (실적 자동 반영)</label><select data-mf="cardId" data-id="' + m.id + '">' + cardOptionsHtml(selectedCard, true) + '</select></div>';
     h += '    <div class="field"><label>금액</label><input type="number" data-mf="amount" data-id="' + m.id + '" value="' + m.amount + '"></div>';
     h += '    <label style="display:block; font-size:12px; color:var(--text-soft); margin-top:8px; font-weight:700;">적용 월 선택</label>';
     h += '    <div class="month-chips">';
+    /* [추가] 모달 내 메모 설정 전체 월 선택 칩 */
+    h += '      <div class="chip chip-all' + (isAllSelected ? ' active' : '') + '" data-act="togglemonth" data-id="' + m.id + '" data-m="all">전체</div>';
     monthNames.forEach(function(mn, i) {
       var mm = i + 1;
       h += '      <div class="chip' + (m.months.indexOf(mm) !== -1 ? ' active' : '') + '" data-act="togglemonth" data-id="' + m.id + '" data-m="' + mm + '">' + mn + '</div>';
@@ -1387,6 +1408,21 @@ function bindEvents() {
       var amount = document.getElementById('topNoteAmount').value;
       if (!text) { showToast('메모 내용을 입력해주세요'); return; }
       addMemoAdvanced(text, cardId, amount, newMemoMonths);
+    };
+  }
+
+  /* 상단 입력폼 전체 선택 버튼 이벤트 */
+  var toggleTopAllMBtn = document.querySelector('[data-act="toggleTopAllM"]');
+  if (toggleTopAllMBtn) {
+    toggleTopAllMBtn.onclick = function() {
+      if (newMemoMonths.length === 12) {
+        newMemoMonths = [];
+      } else {
+        newMemoMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+      }
+      render();
+      var panel = document.getElementById('topNoteOptPanel');
+      if (panel) panel.classList.add('show');
     };
   }
 
@@ -1461,7 +1497,11 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-act="togglemonth"]').forEach(function(chip) {
-    chip.onclick = function() { toggleMemoMonth(chip.getAttribute('data-id'), parseInt(chip.getAttribute('data-m'), 10)); };
+    chip.onclick = function() {
+      var val = chip.getAttribute('data-m');
+      var mm = val === 'all' ? 'all' : parseInt(val, 10);
+      toggleMemoMonth(chip.getAttribute('data-id'), mm);
+    };
   });
 }
 
