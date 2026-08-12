@@ -627,8 +627,7 @@ function render() {
 
   html += '  </div>';
 
-  html += '  <div class="footer-note">뱅크샐러드 라이크 다크 테마 적용됨 • 실시간 클라우드 동기화 중</div>';
-  html += '</div>';
+    html += '</div>';
 
   html += '<button class="fab" id="fabAdd">+</button>';
 
