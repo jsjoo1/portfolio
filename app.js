@@ -31,6 +31,7 @@ var editingMemoId = null;
 var expandedCards = {};
 var confirmState = null;
 var monthDataReady = false;
+var cardsLoaded = false; // 카드 데이터가 로드되었는지 체크하는 플래그
 
 function todayStr() {
   var d = new Date();
@@ -149,27 +150,27 @@ async function reloadMemosToMonth() {
   }
 }
 
-/* [핵심 수정] 카드 목록보다 실적 데이터가 먼저 와도 절대 데이터를 버리지 않음 */
 function subscribeMonth(key) {
   if (monthUnsubscribe) monthUnsubscribe();
   monthDataReady = false;
   monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
     if (docSnap.exists()) {
-      monthData = docSnap.data(); // 있는 데이터를 그대로 통째로 받음
+      monthData = docSnap.data();
       if (!monthData._meta) monthData._meta = {appliedRecurring: [], skipRecurring: false};
     } else {
       monthData = { _meta: {appliedRecurring: [], skipRecurring: false} };
     }
     monthDataReady = true;
 
-    // 카드가 있다면 구조 초기화 세팅
     cards.forEach(function(c) {
       if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
     });
 
     var changed = applyRecurring();
     if (changed) await persistMonth();
-    render();
+    
+    // 카드와 월 데이터가 모두 준비되었을 때만 렌더링 실행
+    if (cardsLoaded) render();
   });
 }
 
@@ -177,19 +178,19 @@ function initRealtimeListeners() {
   onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
     if (docSnap.exists()) {
       cards = docSnap.data().data || [];
-      // 카드 목록이 늦게 도착하더라도 이미 도착한 monthData에 맞게 안전하게 합침
+      cardsLoaded = true; // 카드 로드 완료 표시
       cards.forEach(function(c) {
         if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
       });
     }
-    render();
+    if (monthDataReady) render();
   });
 
   onSnapshot(doc(db, "app_data", "memos"), async (docSnap) => {
     if (docSnap.exists()) {
       memos = docSnap.data().data || [];
     }
-    if (!monthDataReady) { render(); return; }
+    if (!monthDataReady || !cardsLoaded) return;
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
@@ -627,6 +628,7 @@ function render() {
 
   html += '  </div>';
 
+  html += '  <div class="footer-note">뱅크샐러드 라이크 다크 테마 적용됨 • 실시간 클라우드 동기화 중</div>';
   html += '</div>';
 
   html += '<button class="fab" id="fabAdd">+</button>';
