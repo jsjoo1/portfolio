@@ -816,6 +816,7 @@ body {
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AlzaSyA29fT3VqGxdBWulCF7wNuNlulgoRICsfA",
@@ -828,6 +829,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+var currentUser = null;
+var authChecking = true;
 
 var cards = [];
 var memos = [];
@@ -995,7 +999,7 @@ function initRealtimeListeners() {
   });
 }
 
-subscribeMonth(monthKey);
+// (인증 완료 후 startApp()에서 subscribeMonth(monthKey)를 호출합니다)
 
 function calc(card) {
   var d = monthData[card.id] || {fixed: [], tx: []};
@@ -1307,6 +1311,7 @@ function render() {
   html += '    <div class="header-tools">';
   html += '      <button class="tool-btn" id="openCardSettings">카드 설정</button>';
   html += '      <button class="tool-btn" id="openMemos">메모 설정</button>';
+  html += '      <button class="tool-btn" id="logoutBtn">로그아웃</button>';
   html += '    </div>';
   html += '  </div>';
 
@@ -1655,6 +1660,13 @@ function bindEvents() {
   var omm = document.getElementById('openMemos');
   if (omm) omm.onclick = function() { modal = 'memos'; render(); };
 
+  var logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) logoutBtn.onclick = async function() {
+    if (!(await showConfirm('로그아웃 하시겠습니까?'))) return;
+    if (monthUnsubscribe) monthUnsubscribe();
+    await signOut(auth);
+  };
+
   var openResetModalBtn = document.getElementById('openResetModal');
   if (openResetModalBtn) openResetModalBtn.onclick = function() { modal = 'reset'; render(); };
 
@@ -1900,7 +1912,42 @@ function bindEvents() {
   });
 }
 
-initRealtimeListeners();
+/* ---------- 로그인 화면 ---------- */
+function renderLoginScreen() {
+  var app = document.getElementById('app');
+  var html = '';
+  html += '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;">';
+  html += '  <div style="font-size:22px;font-weight:800;margin-bottom:10px;">카드 실적 수첩</div>';
+  html += '  <div style="font-size:13px;color:var(--text-soft);margin-bottom:28px;line-height:1.5;">본인 확인을 위해 구글 계정으로<br>로그인이 필요해요</div>';
+  html += '  <button id="googleLoginBtn" class="primary-btn" style="max-width:280px;">Google로 로그인</button>';
+  html += '</div>';
+  app.innerHTML = html;
+  var btn = document.getElementById('googleLoginBtn');
+  if (btn) btn.onclick = function() {
+    signInWithRedirect(auth, new GoogleAuthProvider());
+  };
+}
+
+function startApp() {
+  subscribeMonth(monthKey);
+  initRealtimeListeners();
+}
+
+/* ---------- 인증 부트스트랩 ---------- */
+getRedirectResult(auth).catch(function(err) {
+  console.error('로그인 리다이렉트 처리 중 오류', err);
+});
+
+onAuthStateChanged(auth, function(user) {
+  authChecking = false;
+  if (user) {
+    currentUser = user;
+    startApp();
+  } else {
+    currentUser = null;
+    renderLoginScreen();
+  }
+});
 </script>
 </body>
 </html>
