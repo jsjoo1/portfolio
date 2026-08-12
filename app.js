@@ -149,18 +149,24 @@ async function reloadMemosToMonth() {
   }
 }
 
+/* [핵심 수정] 카드 목록보다 실적 데이터가 먼저 와도 절대 데이터를 버리지 않음 */
 function subscribeMonth(key) {
   if (monthUnsubscribe) monthUnsubscribe();
   monthDataReady = false;
   monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
-    var base = emptyMonthData();
     if (docSnap.exists()) {
-      var parsed = docSnap.data();
-      cards.forEach(function(c) { if (parsed[c.id]) base[c.id] = parsed[c.id]; });
-      if (parsed._meta) base._meta = parsed._meta;
+      monthData = docSnap.data(); // 있는 데이터를 그대로 통째로 받음
+      if (!monthData._meta) monthData._meta = {appliedRecurring: [], skipRecurring: false};
+    } else {
+      monthData = { _meta: {appliedRecurring: [], skipRecurring: false} };
     }
-    monthData = base;
     monthDataReady = true;
+
+    // 카드가 있다면 구조 초기화 세팅
+    cards.forEach(function(c) {
+      if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
+    });
+
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
@@ -171,6 +177,10 @@ function initRealtimeListeners() {
   onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
     if (docSnap.exists()) {
       cards = docSnap.data().data || [];
+      // 카드 목록이 늦게 도착하더라도 이미 도착한 monthData에 맞게 안전하게 합침
+      cards.forEach(function(c) {
+        if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
+      });
     }
     render();
   });
@@ -1025,21 +1035,18 @@ function bindEvents() {
     };
   });
 
-  /* [수정 완료] 고정 결제 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 사용 내역 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
     btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 연결 */
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
     btn.onclick = function() {
       copyPrevFixed(btn.getAttribute('data-card'));
