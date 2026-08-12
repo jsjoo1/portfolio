@@ -627,7 +627,7 @@ function render() {
 
   html += '  </div>';
 
-    html += '</div>';
+  html += '</div>';
 
   html += '<button class="fab" id="fabAdd">+</button>';
 
