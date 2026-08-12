@@ -816,7 +816,7 @@ body {
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AlzaSyA29fT3VqGxdBWulCF7wNuNlulgoRICsfA",
@@ -846,7 +846,7 @@ var editingFixedId = null;
 var editingMemoId = null;
 var expandedCards = {};
 var confirmState = null;
-var monthDataReady = false; // 이번 달 Firestore 데이터가 실제로 도착했는지 여부 (레이스 컨디션 방지)
+var monthDataReady = false;
 
 function todayStr() {
   var d = new Date();
@@ -917,11 +917,11 @@ function applyRecurring() {
     if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
     
     var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
-    if (!exists) {
+    var alreadyApplied = meta.appliedRecurring.indexOf(rec.id) !== -1;
+    
+    if (!exists && !alreadyApplied) {
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
-      if (meta.appliedRecurring.indexOf(rec.id) === -1) {
-        meta.appliedRecurring.push(rec.id);
-      }
+      meta.appliedRecurring.push(rec.id);
       changed = true;
     }
   });
@@ -949,6 +949,9 @@ async function reloadMemosToMonth() {
       count++;
     } else {
       monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
+      if (monthData._meta.appliedRecurring.indexOf(rec.id) === -1) {
+        monthData._meta.appliedRecurring.push(rec.id);
+      }
       count++;
     }
   });
@@ -964,7 +967,7 @@ async function reloadMemosToMonth() {
 
 function subscribeMonth(key) {
   if (monthUnsubscribe) monthUnsubscribe();
-  monthDataReady = false; // 새 달로 전환하는 동안에는 다른 리스너가 섣불리 덮어쓰지 못하게 막음
+  monthDataReady = false;
   monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
     var base = emptyMonthData();
     if (docSnap.exists()) {
@@ -973,7 +976,7 @@ function subscribeMonth(key) {
       if (parsed._meta) base._meta = parsed._meta;
     }
     monthData = base;
-    monthDataReady = true; // 이 시점부터 실제 이번 달 데이터를 신뢰할 수 있음
+    monthDataReady = true;
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
@@ -992,14 +995,12 @@ function initRealtimeListeners() {
     if (docSnap.exists()) {
       memos = docSnap.data().data || [];
     }
-    if (!monthDataReady) { render(); return; } // 이번 달 데이터가 아직 안 왔으면 저장하지 않고 대기 (초기화 방지)
+    if (!monthDataReady) { render(); return; }
     var changed = applyRecurring();
     if (changed) await persistMonth();
     render();
   });
 }
-
-// (인증 완료 후 startApp()에서 subscribeMonth(monthKey)를 호출합니다)
 
 function calc(card) {
   var d = monthData[card.id] || {fixed: [], tx: []};
@@ -1081,12 +1082,13 @@ async function updateFixedAmount(cardId, itemId, newAmount) {
 async function addTxToMonth(key, cardId, amount, memo, date) {
   var docRef = doc(db, "app_data", "month-" + key);
   var docSnap = await getDoc(docRef);
-  var base = emptyMonthData();
+  var base = {};
   if (docSnap.exists()) {
-    var parsed = docSnap.data();
-    cards.forEach(function(c) { if (parsed[c.id]) base[c.id] = parsed[c.id]; });
-    if (parsed._meta) base._meta = parsed._meta;
+    base = docSnap.data();
+  } else {
+    base = emptyMonthData();
   }
+  if (!base._meta) base._meta = {appliedRecurring: [], skipRecurring: false};
   if (!base[cardId]) base[cardId] = {fixed: [], tx: []};
   base[cardId].tx.push({id: uid(), amount: Number(amount), memo: memo, date: date || ''});
   await setDoc(docRef, base);
@@ -1194,12 +1196,6 @@ async function executeMonthReset() {
 
   await persistMonth();
   modal = null;
-  
-  var base = emptyMonthData();
-  cards.forEach(function(c) { if (monthData[c.id]) base[c.id] = monthData[c.id]; });
-  if (monthData._meta) base._meta = monthData._meta;
-  monthData = base;
-  
   render();
   showToast(label + ' 데이터가 초기화되었습니다');
 }
@@ -1845,21 +1841,18 @@ function bindEvents() {
     };
   });
 
-  /* [수정 완료] 고정 결제 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="delfixed"]').forEach(function(btn) {
     btn.onclick = function() {
       removeFixed(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 사용 내역 삭제 버튼 클릭 이벤트 연결 */
   document.querySelectorAll('[data-act="deltx"]').forEach(function(btn) {
     btn.onclick = function() {
       removeTx(btn.getAttribute('data-card'), btn.getAttribute('data-item'));
     };
   });
 
-  /* [수정 완료] 지난달 고정 결제 불러오기 버튼 이벤트 연결 */
   document.querySelectorAll('[data-act="copyprev"]').forEach(function(btn) {
     btn.onclick = function() {
       copyPrevFixed(btn.getAttribute('data-card'));
@@ -1924,7 +1917,15 @@ function renderLoginScreen() {
   app.innerHTML = html;
   var btn = document.getElementById('googleLoginBtn');
   if (btn) btn.onclick = function() {
-    signInWithRedirect(auth, new GoogleAuthProvider());
+    signInWithPopup(auth, new GoogleAuthProvider())
+      .then((result) => {
+        currentUser = result.user;
+        startApp();
+      })
+      .catch((error) => {
+        console.error("로그인 오류:", error);
+        showToast("로그인에 실패했습니다: " + error.message);
+      });
   };
 }
 
@@ -1932,11 +1933,6 @@ function startApp() {
   subscribeMonth(monthKey);
   initRealtimeListeners();
 }
-
-/* ---------- 인증 부트스트랩 ---------- */
-getRedirectResult(auth).catch(function(err) {
-  console.error('로그인 리다이렉트 처리 중 오류', err);
-});
 
 onAuthStateChanged(auth, function(user) {
   authChecking = false;
