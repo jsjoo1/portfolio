@@ -83,6 +83,17 @@ function showConfirm(message) {
 }
 
 function won(n) { n = Math.round(n || 0); return n.toLocaleString('ko-KR') + '원'; }
+
+// '2026-08-18' -> '8/18'. 올해가 아니면 '25.12/3' 형태
+function shortDate(s) {
+  if (!s) return '';
+  var p = String(s).split('-');
+  if (p.length < 3) return '';
+  var y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+  if (isNaN(m) || isNaN(d)) return '';
+  var cy = new Date().getFullYear();
+  return (y === cy ? '' : String(y).slice(2) + '.') + m + '/' + d;
+}
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 function emptyMonthData() {
@@ -310,12 +321,17 @@ async function removeFixed(cardId, itemId) {
 }
 
 async function updateFixedAmount(cardId, itemId, newAmount) {
+  var key = monthKey;
   var cur = monthData[cardId]; if (!cur) return;
   var target = cur.fixed.find(function(i) { return i.id === itemId; });
   if (target) {
-    target.amount = Number(newAmount) || 0;
-    await persistMonth();
-    showToast('금액을 변경했어요');
+    var v = Number(newAmount) || 0;
+    if (v !== Number(target.amount || 0)) {   // 값이 실제로 바뀐 경우에만 기록
+      target.amount = v;
+      target.updatedAt = todayStr();
+      await persistMonth(key, monthData);
+      showToast('금액을 변경했어요 (' + shortDate(target.updatedAt) + ' 수정)');
+    }
   }
   editingFixedId = null;
   render();
@@ -613,7 +629,11 @@ function render() {
         amtHtml = '<span class="editable-amt" data-act="startEditFixed" data-id="' + f.id + '" title="터치하여 금액 수정">' + won(f.amount) + '</span>';
       }
 
-      html += '    <div class="row-line"><span class="rl-label">' + (f.recurringId ? '<span class="tag-recurring">정기</span>' : '') + esc(f.label) + '</span><span class="rl-amt">' + amtHtml + '<button class="rl-del" data-act="delfixed" data-card="' + card.id + '" data-item="' + f.id + '">✕</button></span></div>';
+      var editedHtml = f.updatedAt
+        ? '<span class="rl-edited" title="' + esc(f.updatedAt) + ' 금액 수정">' + shortDate(f.updatedAt) + ' 수정</span>'
+        : '';
+
+      html += '    <div class="row-line"><span class="rl-label">' + (f.recurringId ? '<span class="tag-recurring">정기</span>' : '') + esc(f.label) + '</span>' + editedHtml + '<span class="rl-amt">' + amtHtml + '<button class="rl-del" data-act="delfixed" data-card="' + card.id + '" data-item="' + f.id + '">✕</button></span></div>';
     });
 
     html += '    <div class="add-form">';

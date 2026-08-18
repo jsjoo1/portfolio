@@ -321,7 +321,21 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.03);
 }
 .row-line:last-child { border-bottom: none; }
-.row-line .rl-label { color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.row-line .rl-label { color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 고정결제 금액 최종 수정일자 */
+.row-line .rl-edited {
+  flex-shrink: 0;
+  margin: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: rgba(255,255,255,0.06);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
 .row-line .rl-amt { color: var(--text-soft); font-weight: 700; display: flex; align-items: center; gap: 6px; }
 
 .editable-amt {
