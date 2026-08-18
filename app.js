@@ -19,7 +19,23 @@ var authChecking = true;
 
 var cards = [];
 var memos = [];
-var monthKey = currentMonthKey();
+// 마지막으로 보던 월을 기억한다. 월이 바뀌어도 화면이 비어 보이지 않는다.
+// 단, 30일 이상 지난 기록이면 현재 월로 되돌린다.
+var monthKey = (function () {
+  try {
+    var saved = localStorage.getItem('cardLastMonth');
+    var savedAt = Number(localStorage.getItem('cardLastMonthAt') || 0);
+    if (saved && /^\d{4}-\d{2}$/.test(saved) && (Date.now() - savedAt) < 30 * 86400000) return saved;
+  } catch (e) { }
+  return currentMonthKey();
+})();
+
+function rememberMonth(key) {
+  try {
+    localStorage.setItem('cardLastMonth', key);
+    localStorage.setItem('cardLastMonthAt', String(Date.now()));
+  } catch (e) { }
+}
 var monthData = {};
 var modal = null;
 var resetType = 'txOnly';
@@ -75,8 +91,17 @@ function emptyMonthData() {
   return d;
 }
 
-async function persistMonth() {
-  await setDoc(doc(db, "app_data", "month-" + monthKey), monthData);
+// 저장 대상 월과 데이터를 인자로 고정한다.
+// 전역 monthKey 를 그대로 쓰면, 저장이 끝나기 전에 월을 넘겼을 때
+// 다른 달 문서를 덮어쓰는 사고가 난다.
+async function persistMonth(keyArg, dataArg) {
+  var key = keyArg || monthKey;
+  var data = dataArg || monthData;
+  if (!data || !data._meta) {
+    console.warn('[SAVE] _meta 없는 데이터 저장 시도 — 중단', key);
+    return;
+  }
+  await setDoc(doc(db, "app_data", "month-" + key), data);
 }
 
 async function persistCards() {
@@ -87,25 +112,27 @@ async function persistMemos() {
   await setDoc(doc(db, "app_data", "memos"), { data: memos });
 }
 
-function applyRecurring() {
-  var meta = monthData._meta || (monthData._meta = {appliedRecurring: [], skipRecurring: false});
-  
+function applyRecurring(keyArg, dataArg) {
+  var key = keyArg || monthKey;
+  var data = dataArg || monthData;
+  var meta = data._meta || (data._meta = {appliedRecurring: [], skipRecurring: false});
+
   if (meta.skipRecurring) return false;
 
-  var mm = parseInt(monthKey.split('-')[1], 10);
+  var mm = parseInt(key.split('-')[1], 10);
   var changed = false;
 
   memos.forEach(function(rec) {
     var cId = rec.cardId || rec.cardid;
     if (!cId || !rec.amount || !rec.months || rec.months.indexOf(mm) === -1) return;
     
-    if (!monthData[cId]) monthData[cId] = {fixed: [], tx: []};
-    
-    var exists = monthData[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
+    if (!data[cId]) data[cId] = {fixed: [], tx: []};
+
+    var exists = data[cId].fixed.some(function(f) { return f.recurringId === rec.id; });
     var alreadyApplied = meta.appliedRecurring.indexOf(rec.id) !== -1;
-    
+
     if (!exists && !alreadyApplied) {
-      monthData[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
+      data[cId].fixed.push({id: uid(), label: rec.text, amount: Number(rec.amount) || 0, recurringId: rec.id});
       meta.appliedRecurring.push(rec.id);
       changed = true;
     }
@@ -153,37 +180,52 @@ async function reloadMemosToMonth() {
 function subscribeMonth(key) {
   if (monthUnsubscribe) monthUnsubscribe();
   monthDataReady = false;
+  rememberMonth(key);
+
   monthUnsubscribe = onSnapshot(doc(db, "app_data", "month-" + key), async (docSnap) => {
+    // 이미 다른 달로 넘어간 뒤 늦게 도착한 응답은 버린다
+    if (key !== monthKey) { console.warn('[SYNC] 지난 구독 응답 무시:', key); return; }
+
+    var data;
     if (docSnap.exists()) {
-      monthData = docSnap.data();
-      if (!monthData._meta) monthData._meta = {appliedRecurring: [], skipRecurring: false};
+      data = docSnap.data();
+      if (!data._meta) data._meta = {appliedRecurring: [], skipRecurring: false};
     } else {
-      monthData = { _meta: {appliedRecurring: [], skipRecurring: false} };
+      data = { _meta: {appliedRecurring: [], skipRecurring: false} };
     }
-    monthDataReady = true;
 
     cards.forEach(function(c) {
-      if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
+      if (!data[c.id]) data[c.id] = {fixed: [], tx: []};
     });
 
-    var changed = applyRecurring();
-    if (changed) await persistMonth();
-    
-    // 카드와 월 데이터가 모두 준비되었을 때만 렌더링 실행
-    if (cardsLoaded) render();
+    monthData = data;
+    monthDataReady = true;
+
+    // 카드가 아직 안 왔으면 정기메모 반영을 미룬다 (빈 상태로 저장되는 것 방지)
+    if (cardsLoaded) {
+      var changed = applyRecurring(key, data);
+      if (changed && key === monthKey) await persistMonth(key, data);
+      render();
+    }
   });
 }
 
 function initRealtimeListeners() {
-  onSnapshot(doc(db, "app_data", "cards-config"), (docSnap) => {
+  onSnapshot(doc(db, "app_data", "cards-config"), async (docSnap) => {
     if (docSnap.exists()) {
       cards = docSnap.data().data || [];
-      cardsLoaded = true; // 카드 로드 완료 표시
+      cardsLoaded = true;
       cards.forEach(function(c) {
         if (!monthData[c.id]) monthData[c.id] = {fixed: [], tx: []};
       });
     }
-    if (monthDataReady) render();
+    if (monthDataReady) {
+      // 월 데이터가 먼저 도착해 보류됐던 정기메모 반영을 여기서 수행
+      var key = monthKey;
+      var changed = applyRecurring(key, monthData);
+      if (changed && key === monthKey) await persistMonth(key, monthData);
+      render();
+    }
   });
 
   onSnapshot(doc(db, "app_data", "memos"), async (docSnap) => {
@@ -191,8 +233,9 @@ function initRealtimeListeners() {
       memos = docSnap.data().data || [];
     }
     if (!monthDataReady || !cardsLoaded) return;
-    var changed = applyRecurring();
-    if (changed) await persistMonth();
+    var key = monthKey;
+    var changed = applyRecurring(key, monthData);
+    if (changed && key === monthKey) await persistMonth(key, monthData);
     render();
   });
 }
@@ -209,6 +252,8 @@ function calc(card) {
 
 async function changeMonth(delta) {
   monthKey = shiftMonth(monthKey, delta);
+  monthData = { _meta: {appliedRecurring: [], skipRecurring: false} };  // 이전 달 잔상 제거
+  monthDataReady = false;
   subscribeMonth(monthKey);
 }
 
@@ -254,10 +299,12 @@ async function addFixed(cardId, label, amount) {
 }
 
 async function removeFixed(cardId, itemId) {
+  var key = monthKey;
   if (!(await showConfirm('해당 고정 결제 내역을 정말 삭제하시겠습니까?'))) return;
+  if (key !== monthKey) { showToast('월이 변경되어 취소했어요'); return; }
   var cur = monthData[cardId]; if (!cur) return;
   cur.fixed = cur.fixed.filter(function(i) { return i.id !== itemId; });
-  await persistMonth();
+  await persistMonth(key, monthData);
   render();
   showToast('고정 결제 내역을 삭제했어요');
 }
@@ -290,10 +337,12 @@ async function addTxToMonth(key, cardId, amount, memo, date) {
 }
 
 async function removeTx(cardId, itemId) {
+  var key = monthKey;
   if (!(await showConfirm('해당 사용 내역을 정말 삭제하시겠습니까?'))) return;
+  if (key !== monthKey) { showToast('월이 변경되어 취소했어요'); return; }
   var cur = monthData[cardId]; if (!cur) return;
   cur.tx = cur.tx.filter(function(i) { return i.id !== itemId; });
-  await persistMonth();
+  await persistMonth(key, monthData);
   render();
   showToast('사용 내역을 삭제했어요');
 }
@@ -325,6 +374,7 @@ async function updateMemo(id, text, cardId, amount, months) {
 }
 
 async function removeMemo(id) {
+  var key = monthKey;
   var targetMemo = memos.find(function(m) { return m.id === id; });
   if (!targetMemo) return;
 
@@ -340,7 +390,8 @@ async function removeMemo(id) {
       '[취소] 누름 -> 메모만 삭제하고 카드 실적 내역은 유지'
     );
 
-    if (deleteActualRecord && monthData[cId]) {
+    if (deleteActualRecord && key !== monthKey) { showToast('월이 변경되어 실적 삭제는 건너뛰었어요'); }
+    else if (deleteActualRecord && monthData[cId]) {
       monthData[cId].fixed = monthData[cId].fixed.filter(function(f) {
         return f.recurringId !== id;
       });
@@ -349,7 +400,7 @@ async function removeMemo(id) {
           return rId !== id;
         });
       }
-      await persistMonth();
+      await persistMonth(key, monthData);
     }
   }
 
@@ -358,6 +409,7 @@ async function removeMemo(id) {
 }
 
 async function executeMonthReset() {
+  var key = monthKey;
   var label = monthLabel(monthKey);
 
   if (resetType === 'restoreRecurring') {
@@ -372,6 +424,7 @@ async function executeMonthReset() {
     : label + '의 [모든 실적 데이터(고정결제+사용내역)]를 정말 초기화하시겠습니까?';
 
   if (!(await showConfirm(confirmMsg))) return;
+  if (key !== monthKey) { showToast('월이 변경되어 초기화를 취소했어요'); return; }
 
   cards.forEach(function(c) {
     if (monthData[c.id]) {
@@ -389,7 +442,7 @@ async function executeMonthReset() {
     };
   }
 
-  await persistMonth();
+  await persistMonth(key, monthData);
   modal = null;
   render();
   showToast(label + ' 데이터가 초기화되었습니다');
@@ -828,6 +881,8 @@ function bindEvents() {
       var y = document.getElementById('pickerYear').value;
       var m = document.getElementById('pickerMonth').value;
       monthKey = y + '-' + String(m).padStart(2, '0');
+      monthData = { _meta: {appliedRecurring: [], skipRecurring: false} };
+      monthDataReady = false;
       modal = null;
       subscribeMonth(monthKey);
     };
@@ -837,6 +892,8 @@ function bindEvents() {
   if (pickerCurrentMonth) {
     pickerCurrentMonth.onclick = function() {
       monthKey = currentMonthKey();
+      monthData = { _meta: {appliedRecurring: [], skipRecurring: false} };
+      monthDataReady = false;
       modal = null;
       subscribeMonth(monthKey);
     };
